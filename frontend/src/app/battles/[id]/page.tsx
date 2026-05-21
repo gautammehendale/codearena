@@ -1,0 +1,267 @@
+'use client';
+import { useEffect, useState, useRef } from 'react';
+import { useParams, useRouter } from 'next/navigation';
+import dynamic from 'next/dynamic';
+import { Swords, Play, Loader, CheckCircle, XCircle, Send, Trophy, Clock } from 'lucide-react';
+import api, { submissionsApi } from '@/lib/api';
+import { connectSocket } from '@/lib/socket';
+import { useAuthStore } from '@/lib/store';
+
+const MonacoEditor = dynamic(() => import('@monaco-editor/react'), { ssr: false });
+
+const LANGUAGES = [
+  { value: 'python', label: 'Python' },
+  { value: 'javascript', label: 'JavaScript' },
+  { value: 'java', label: 'Java' },
+  { value: 'cpp', label: 'C++' },
+];
+
+const STARTERS: Record<string, string> = {
+  python: 'import sys\ninput = sys.stdin.readline\n\n# Write your solution here\n',
+  javascript: 'const lines = require("fs").readFileSync("/dev/stdin","utf8").trim().split("\\n");\n\n',
+  java: 'import java.util.Scanner;\npublic class Main {\n    public static void main(String[] args) {\n        Scanner sc = new Scanner(System.in);\n    }\n}',
+  cpp: '#include <bits/stdc++.h>\nusing namespace std;\nint main() {\n    return 0;\n}',
+};
+
+interface ChatMessage { id: string; username: string; message: string; created_at: string; user_id: string; }
+
+export default function BattleArenaPage() {
+  const { id } = useParams<{ id: string }>();
+  const router = useRouter();
+  const { user } = useAuthStore();
+  const [battle, setBattle] = useState<any>(null);
+  const [problem, setProblem] = useState<any>(null);
+  const [language, setLanguage] = useState('python');
+  const [code, setCode] = useState(STARTERS.python);
+  const [submitting, setSubmitting] = useState(false);
+  const [result, setResult] = useState<any>(null);
+  const [myProgress, setMyProgress] = useState({ testsPassed: 0, totalTests: 0, solved: false });
+  const [oppProgress, setOppProgress] = useState({ testsPassed: 0, totalTests: 0, solved: false });
+  const [winner, setWinner] = useState<string | null>(null);
+  const [preference, setPreference] = useState('');
+  const [prefSet, setPrefSet] = useState(false);
+  const [chat, setChat] = useState<ChatMessage[]>([]);
+  const [chatMsg, setChatMsg] = useState('');
+  const [elapsed, setElapsed] = useState(0);
+  const chatRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!user) { router.push('/login'); return; }
+    api.get('/battles/active').then(r => {
+      if (r.data.battle) {
+        const b = r.data.battle;
+        setBattle(b);
+        setMyProgress(b.myProgress || { testsPassed: 0, totalTests: 0, solved: false });
+        setOppProgress(b.opponentProgress || { testsPassed: 0, totalTests: 0, solved: false });
+        if (b.problem_id) {
+          api.get(`/problems/${b.problem_slug || b.problem_id}`).then(pr => setProblem(pr.data)).catch(() => {});
+        }
+      }
+    });
+    api.get(`/chat/battle-${id}`).then(r => setChat(r.data)).catch(() => {});
+  }, [id, user]);
+
+  useEffect(() => {
+    if (!user) return;
+    const socket = connectSocket(user.id);
+    socket.emit('join_battle', id);
+    socket.emit('join_chat', `battle-${id}`);
+
+    socket.on('battle_start', (data: any) => {
+      fetchBattle();
+      if (data.problemId) api.get(`/problems/${data.problemId}`).then(r => setProblem(r.data)).catch(() => {});
+    });
+
+    socket.on('battle_progress', (data: any) => {
+      if (data.userId === user.id) setMyProgress({ testsPassed: data.testsPassed, totalTests: data.totalTests, solved: data.solved });
+      else setOppProgress({ testsPassed: data.testsPassed, totalTests: data.totalTests, solved: data.solved });
+    });
+
+    socket.on('submission_update', (data: any) => {
+      setResult(data); setSubmitting(false);
+    });
+
+    socket.on('battle_end', (data: any) => setWinner(data.winnerId));
+    socket.on('new_message', (msg: ChatMessage) => {
+      setChat(prev => [...prev, msg]);
+      setTimeout(() => chatRef.current?.scrollTo({ top: 9999, behavior: 'smooth' }), 50);
+    });
+
+    return () => {
+      socket.off('battle_start'); socket.off('battle_progress');
+      socket.off('submission_update'); socket.off('battle_end'); socket.off('new_message');
+    };
+  }, [id, user]);
+
+  // Timer
+  useEffect(() => {
+    if (!battle?.started_at) return;
+    const t = setInterval(() => setElapsed(Math.floor((Date.now() - new Date(battle.started_at).getTime()) / 1000)), 1000);
+    return () => clearInterval(t);
+  }, [battle?.started_at]);
+
+  const fetchBattle = async () => {
+    const r = await api.get('/battles/active');
+    if (r.data.battle) setBattle(r.data.battle);
+  };
+
+  const handleSetPref = async (diff: string) => {
+    setPreference(diff);
+    await api.post(`/battles/${id}/preference`, { difficulty: diff });
+    setPrefSet(true);
+  };
+
+  const handleSubmit = async () => {
+    if (!problem || !user) return;
+    setSubmitting(true); setResult(null);
+    try {
+      const res = await submissionsApi.submit({ problemId: problem.id, language, code });
+      const socket = connectSocket(user.id);
+      socket.emit('join_submission', res.data.id);
+    } catch (err: any) {
+      setSubmitting(false);
+      setResult({ status: 'Error' });
+    }
+  };
+
+  const sendChat = async () => {
+    if (!chatMsg.trim() || !user) return;
+    const socket = connectSocket(user.id);
+    socket.emit('chat_message', { roomId: `battle-${id}`, message: chatMsg, userId: user.id, username: user.username });
+    setChatMsg('');
+  };
+
+  const formatTime = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+
+  const ProgressBar = ({ label, progress, solved, isMe }: { label: string; progress: { testsPassed: number; totalTests: number; solved: boolean }; solved: boolean; isMe: boolean }) => (
+    <div className={`glass rounded-xl p-4 ${solved ? 'border-green-500/40' : ''}`}>
+      <div className="flex items-center justify-between mb-2">
+        <span className={`text-sm font-medium ${isMe ? 'text-blue-400' : 'text-purple-400'}`}>{label}</span>
+        {solved ? <CheckCircle size={16} className="text-green-400" /> : <span className="text-xs text-gray-400">{progress.testsPassed}/{progress.totalTests || '?'} tests</span>}
+      </div>
+      <div className="h-2 bg-gray-800 rounded-full overflow-hidden">
+        <div className={`h-full rounded-full transition-all duration-500 ${solved ? 'bg-green-500' : isMe ? 'bg-blue-500' : 'bg-purple-500'}`}
+          style={{ width: progress.totalTests ? `${(progress.testsPassed / progress.totalTests) * 100}%` : '0%' }} />
+      </div>
+      {solved && <p className="text-xs text-green-400 mt-1">✓ Solved!</p>}
+    </div>
+  );
+
+  if (!battle) return <div className="flex justify-center pt-40"><Loader className="animate-spin text-blue-400" size={32} /></div>;
+
+  return (
+    <div className="h-screen pt-16 flex flex-col overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center justify-between px-6 py-3 border-b border-gray-800 bg-gray-950">
+        <div className="flex items-center gap-3">
+          <Swords className="text-purple-400" size={20} />
+          <span className="font-semibold">You vs {battle.opponentName}</span>
+          <span className={`px-2 py-0.5 rounded-full text-xs ${battle.status === 'active' ? 'bg-green-500/20 text-green-400' : battle.status === 'lobby' ? 'bg-yellow-500/20 text-yellow-400' : 'bg-gray-700 text-gray-400'}`}>
+            {battle.status}
+          </span>
+        </div>
+        {battle.started_at && <div className="flex items-center gap-2 font-mono text-yellow-400"><Clock size={16} />{formatTime(elapsed)}</div>}
+      </div>
+
+      {/* Winner Banner */}
+      {winner && (
+        <div className={`px-6 py-4 text-center font-bold text-lg ${winner === user?.id ? 'bg-green-900/40 text-green-400' : 'bg-red-900/40 text-red-400'}`}>
+          <Trophy size={20} className="inline mr-2" />
+          {winner === user?.id ? '🎉 You Won! +50 points' : `${battle.opponentName} won this round. Better luck next time!`}
+        </div>
+      )}
+
+      {/* Lobby — Difficulty Selection */}
+      {battle.status === 'lobby' && !winner && (
+        <div className="flex-1 flex items-center justify-center">
+          <div className="glass rounded-2xl p-10 text-center max-w-md w-full mx-6">
+            <div className="text-4xl mb-4">⚙️</div>
+            <h2 className="text-xl font-bold mb-2">Choose Difficulty</h2>
+            <p className="text-gray-400 text-sm mb-6">Both players must choose. If you disagree, Player 1's choice wins.</p>
+            <div className="flex gap-3 justify-center mb-4">
+              {['Easy', 'Medium', 'Hard'].map(d => (
+                <button key={d} onClick={() => handleSetPref(d)} disabled={prefSet}
+                  className={`px-5 py-2.5 rounded-xl font-medium text-sm transition-all ${preference === d ? 'ring-2 ring-offset-1 ring-offset-gray-950 ring-blue-500' : ''} ${d === 'Easy' ? 'bg-green-500/20 text-green-400 hover:bg-green-500/30' : d === 'Medium' ? 'bg-yellow-500/20 text-yellow-400 hover:bg-yellow-500/30' : 'bg-red-500/20 text-red-400 hover:bg-red-500/30'} disabled:opacity-50`}>
+                  {d}
+                </button>
+              ))}
+            </div>
+            {prefSet && <p className="text-green-400 text-sm">✓ Preference set — waiting for opponent...</p>}
+          </div>
+        </div>
+      )}
+
+      {/* Active Battle */}
+      {battle.status === 'active' && !winner && (
+        <div className="flex flex-1 overflow-hidden">
+          {/* Left: Problem + Progress + Chat */}
+          <div className="w-2/5 flex flex-col border-r border-gray-800">
+            {/* Progress bars */}
+            <div className="p-4 border-b border-gray-800 space-y-3">
+              <ProgressBar label="You" progress={myProgress} solved={myProgress.solved} isMe={true} />
+              <ProgressBar label={battle.opponentName} progress={oppProgress} solved={oppProgress.solved} isMe={false} />
+            </div>
+
+            {/* Problem description */}
+            <div className="flex-1 overflow-y-auto p-4">
+              {problem ? (
+                <>
+                  <h2 className="font-bold text-lg mb-1">{problem.title}</h2>
+                  <span className={`text-xs font-medium ${problem.difficulty === 'Easy' ? 'text-green-400' : problem.difficulty === 'Medium' ? 'text-yellow-400' : 'text-red-400'}`}>{problem.difficulty}</span>
+                  <p className="text-gray-300 text-sm mt-3 leading-relaxed whitespace-pre-wrap">{problem.description}</p>
+                </>
+              ) : <Loader className="animate-spin text-blue-400" size={24} />}
+            </div>
+
+            {/* Chat */}
+            <div className="border-t border-gray-800 flex flex-col h-48">
+              <div className="px-3 py-2 text-xs text-gray-500 border-b border-gray-800/50">Battle Chat</div>
+              <div ref={chatRef} className="flex-1 overflow-y-auto px-3 py-2 space-y-1">
+                {chat.map(m => (
+                  <div key={m.id} className="text-xs">
+                    <span className={`font-semibold mr-1 ${m.user_id === user?.id ? 'text-blue-400' : 'text-purple-400'}`}>{m.username}:</span>
+                    <span className="text-gray-300">{m.message}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="flex gap-2 p-2 border-t border-gray-800/50">
+                <input value={chatMsg} onChange={e => setChatMsg(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && sendChat()}
+                  placeholder="Message..." className="flex-1 bg-gray-800 rounded px-2 py-1 text-xs focus:outline-none" />
+                <button onClick={sendChat} className="p-1.5 bg-blue-600 rounded hover:bg-blue-700">
+                  <Send size={12} />
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Right: Editor */}
+          <div className="flex-1 flex flex-col">
+            <div className="flex items-center justify-between px-4 py-2 border-b border-gray-800 bg-gray-900/50">
+              <select value={language} onChange={e => { setLanguage(e.target.value); setCode(STARTERS[e.target.value] || ''); }}
+                className="bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm focus:outline-none">
+                {LANGUAGES.map(l => <option key={l.value} value={l.value}>{l.label}</option>)}
+              </select>
+              <button onClick={handleSubmit} disabled={submitting} className="btn-primary flex items-center gap-2 text-sm">
+                {submitting ? <Loader size={16} className="animate-spin" /> : <Play size={16} />}
+                {submitting ? 'Judging...' : 'Submit'}
+              </button>
+            </div>
+            <div className="flex-1">
+              <MonacoEditor height="100%" language={language} value={code} onChange={v => setCode(v || '')}
+                theme="vs-dark" options={{ fontSize: 14, minimap: { enabled: false }, padding: { top: 12 } }} />
+            </div>
+            {result && (
+              <div className="border-t border-gray-800 p-3 bg-gray-900/50">
+                <div className={`flex items-center gap-2 text-sm font-semibold ${result.status === 'Accepted' ? 'text-green-400' : 'text-red-400'}`}>
+                  {result.status === 'Accepted' ? <CheckCircle size={16} /> : <XCircle size={16} />} {result.status}
+                  {result.runtime && <span className="text-gray-400 font-normal">· {result.runtime}ms</span>}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

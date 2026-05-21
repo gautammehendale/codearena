@@ -12,10 +12,16 @@ const submissionRoutes = require('./routes/submissions');
 const leaderboardRoutes = require('./routes/leaderboard');
 const contestRoutes = require('./routes/contests');
 const hintRoutes = require('./routes/hints');
+const battleRoutes = require('./routes/battles');
+const skillRoutes = require('./routes/skills');
+const badgeRoutes = require('./routes/badges');
+const chatRoutes = require('./routes/chat');
 const { initDB } = require('./models/db');
+const { runMigrations } = require('./models/migrations');
 const { initRedis } = require('./services/redis');
 const { initQueue } = require('./services/queue');
 const { setupSocketHandlers } = require('./services/socket');
+const { setupBattleScheduler } = require('./services/battleScheduler');
 const logger = require('./utils/logger');
 
 const app = express();
@@ -38,6 +44,10 @@ app.use('/api/submissions', submissionRoutes);
 app.use('/api/leaderboard', leaderboardRoutes);
 app.use('/api/contests', contestRoutes);
 app.use('/api/hints', hintRoutes);
+app.use('/api/battles', battleRoutes);
+app.use('/api/skills', skillRoutes);
+app.use('/api/badges', badgeRoutes);
+app.use('/api/chat', chatRoutes);
 
 app.get('/health', (req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString() }));
 
@@ -50,9 +60,11 @@ const PORT = process.env.PORT || 5000;
 
 async function start() {
   await initDB();
+  await runMigrations();
   await initRedis();
   await initQueue(io);
   setupSocketHandlers(io);
+  setupBattleScheduler(io);
   server.listen(PORT, () => logger.info(`CodeArena server running on port ${PORT}`));
 }
 

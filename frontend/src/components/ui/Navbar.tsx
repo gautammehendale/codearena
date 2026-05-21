@@ -25,6 +25,9 @@ export default function Navbar() {
           <Link href="/contests" className="hover:text-white flex items-center gap-1.5 transition-colors">
             <Swords size={16} /> Contests
           </Link>
+          <Link href="/battles" className="hover:text-white flex items-center gap-1.5 transition-colors">
+            <Swords size={16} className="text-purple-400" /> Battles
+          </Link>
           <Link href="/leaderboard" className="hover:text-white flex items-center gap-1.5 transition-colors">
             <Trophy size={16} /> Leaderboard
           </Link>
