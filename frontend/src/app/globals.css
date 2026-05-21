@@ -1,0 +1,32 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 3 7 18;
+    --foreground: 243 244 246;
+  }
+}
+
+body {
+  background-color: rgb(3, 7, 18);
+  color: rgb(243, 244, 246);
+}
+
+.difficulty-easy { @apply text-green-400; }
+.difficulty-medium { @apply text-yellow-400; }
+.difficulty-hard { @apply text-red-400; }
+
+.status-accepted { @apply text-green-400; }
+.status-wrong { @apply text-red-400; }
+.status-tle { @apply text-yellow-400; }
+.status-pending { @apply text-gray-400; }
+
+.monaco-container { height: calc(100vh - 200px); }
+
+@layer utilities {
+  .glass { @apply bg-gray-900/80 backdrop-blur-sm border border-gray-800; }
+  .btn-primary { @apply bg-blue-600 hover:bg-blue-700 text-white font-medium px-4 py-2 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed; }
+  .btn-secondary { @apply bg-gray-800 hover:bg-gray-700 text-gray-100 font-medium px-4 py-2 rounded-lg transition-colors; }
+}
