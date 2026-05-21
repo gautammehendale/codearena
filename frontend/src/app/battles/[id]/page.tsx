@@ -43,6 +43,8 @@ export default function BattleArenaPage() {
   const [chat, setChat] = useState<ChatMessage[]>([]);
   const [chatMsg, setChatMsg] = useState('');
   const [elapsed, setElapsed] = useState(0);
+  const [quitModal, setQuitModal] = useState(false);
+  const [practiceMode, setPracticeMode] = useState(false);
   const chatRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -124,6 +126,25 @@ export default function BattleArenaPage() {
     }
   };
 
+  const handleQuit = async () => {
+    try {
+      await api.post(`/battles/${id}/quit`);
+      setWinner('opponent');
+      setQuitModal(false);
+      // Ask if they want to keep practicing
+      setTimeout(() => {
+        const keepPracticing = confirm('You quit. Your opponent wins.\n\nWant to keep solving this problem for practice? (No ranking impact)');
+        if (keepPracticing) {
+          setPracticeMode(true);
+        } else {
+          router.push('/battles');
+        }
+      }, 500);
+    } catch (err: any) {
+      alert(err.response?.data?.error || 'Failed to quit');
+    }
+  };
+
   const sendChat = async () => {
     if (!chatMsg.trim() || !user) return;
     const socket = connectSocket(user.id);
@@ -160,7 +181,15 @@ export default function BattleArenaPage() {
             {battle.status}
           </span>
         </div>
-        {battle.started_at && <div className="flex items-center gap-2 font-mono text-yellow-400"><Clock size={16} />{formatTime(elapsed)}</div>}
+        <div className="flex items-center gap-3">
+          {battle.started_at && <div className="flex items-center gap-2 font-mono text-yellow-400"><Clock size={16} />{formatTime(elapsed)}</div>}
+          {battle.status === 'active' && !winner && !practiceMode && (
+            <button onClick={() => setQuitModal(true)} className="px-3 py-1.5 text-xs text-red-400 border border-red-500/30 rounded-lg hover:bg-red-500/10 transition-colors">
+              Quit Battle
+            </button>
+          )}
+          {practiceMode && <span className="text-xs text-yellow-400 bg-yellow-500/10 px-2 py-1 rounded">Practice Mode</span>}
+        </div>
       </div>
 
       {/* Winner Banner */}
@@ -259,6 +288,20 @@ export default function BattleArenaPage() {
                 </div>
               </div>
             )}
+          </div>
+        </div>
+      )}
+      {/* Quit Confirm Modal */}
+      {quitModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-6">
+          <div className="glass rounded-2xl p-8 max-w-sm w-full text-center">
+            <div className="text-4xl mb-4">🏳️</div>
+            <h2 className="text-xl font-bold mb-2">Quit this battle?</h2>
+            <p className="text-gray-400 text-sm mb-6">Your opponent wins and gets +50 points. You can choose to keep solving the problem for practice with no ranking impact.</p>
+            <div className="flex gap-3">
+              <button onClick={() => setQuitModal(false)} className="flex-1 btn-secondary">Cancel</button>
+              <button onClick={handleQuit} className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg transition-colors">Quit Battle</button>
+            </div>
           </div>
         </div>
       )}

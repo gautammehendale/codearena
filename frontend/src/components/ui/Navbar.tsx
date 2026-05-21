@@ -1,13 +1,12 @@
 'use client';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Code2, Trophy, BookOpen, Swords, LogOut, User } from 'lucide-react';
+import { Code2, Trophy, BookOpen, Swords, LogOut, Shield } from 'lucide-react';
 import { useAuthStore } from '@/lib/store';
 
 export default function Navbar() {
   const { user, logout } = useAuthStore();
   const router = useRouter();
-
   const handleLogout = () => { logout(); router.push('/'); };
 
   return (
@@ -19,32 +18,27 @@ export default function Navbar() {
         </Link>
 
         <div className="hidden md:flex items-center gap-6 text-sm text-gray-400">
-          <Link href="/problems" className="hover:text-white flex items-center gap-1.5 transition-colors">
-            <BookOpen size={16} /> Problems
-          </Link>
-          <Link href="/contests" className="hover:text-white flex items-center gap-1.5 transition-colors">
-            <Swords size={16} /> Contests
-          </Link>
-          <Link href="/battles" className="hover:text-white flex items-center gap-1.5 transition-colors">
-            <Swords size={16} className="text-purple-400" /> Battles
-          </Link>
-          <Link href="/leaderboard" className="hover:text-white flex items-center gap-1.5 transition-colors">
-            <Trophy size={16} /> Leaderboard
-          </Link>
+          <Link href="/problems" className="hover:text-white flex items-center gap-1.5 transition-colors"><BookOpen size={16} /> Problems</Link>
+          <Link href="/contests" className="hover:text-white flex items-center gap-1.5 transition-colors"><Swords size={16} /> Contests</Link>
+          <Link href="/battles" className="hover:text-white flex items-center gap-1.5 transition-colors text-purple-400 hover:text-purple-300"><Swords size={16} /> Battles</Link>
+          <Link href="/leaderboard" className="hover:text-white flex items-center gap-1.5 transition-colors"><Trophy size={16} /> Leaderboard</Link>
+          {user?.role === 'admin' && (
+            <Link href="/admin" className="hover:text-white flex items-center gap-1.5 transition-colors text-purple-400 hover:text-purple-300">
+              <Shield size={16} /> Admin
+            </Link>
+          )}
         </div>
 
         <div className="flex items-center gap-3">
           {user ? (
             <>
               <Link href="/profile" className="flex items-center gap-2 text-sm text-gray-300 hover:text-white transition-colors">
-                <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-xs font-bold">
+                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-600 to-purple-600 flex items-center justify-center text-xs font-bold">
                   {user.username[0].toUpperCase()}
                 </div>
                 <span className="hidden md:block">{user.username}</span>
               </Link>
-              <button onClick={handleLogout} className="p-2 text-gray-400 hover:text-white transition-colors">
-                <LogOut size={18} />
-              </button>
+              <button onClick={handleLogout} className="p-2 text-gray-400 hover:text-white transition-colors"><LogOut size={18} /></button>
             </>
           ) : (
             <>

@@ -56,3 +56,8 @@ export const hintsApi = {
   getHint: (data: { problemId: string; code: string; language: string }) => api.post('/hints', data),
   getStatus: (problemId: string) => api.get(`/hints/status/${problemId}`),
 };
+
+export const statsApi = {
+  public: () => api.get('/stats/public'),
+  adminUsers: () => api.get('/stats/admin/users'),
+};

@@ -25,6 +25,7 @@ const { setupBattleScheduler } = require('./services/battleScheduler');
 const logger = require('./utils/logger');
 
 const app = express();
+app.set('io', null); // set after io is created
 const server = http.createServer(app);
 
 const io = new Server(server, {
@@ -34,6 +35,8 @@ const io = new Server(server, {
 app.use(helmet());
 app.use(cors({ origin: process.env.FRONTEND_URL || 'http://localhost:3000', credentials: true }));
 app.use(express.json());
+const passport = require('passport');
+app.use(passport.initialize());
 
 const limiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 100 });
 app.use('/api/', limiter);
@@ -48,6 +51,8 @@ app.use('/api/battles', battleRoutes);
 app.use('/api/skills', skillRoutes);
 app.use('/api/badges', badgeRoutes);
 app.use('/api/chat', chatRoutes);
+const statsRoutes = require('./routes/stats');
+app.use('/api/stats', statsRoutes);
 
 app.get('/health', (req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString() }));
 
@@ -65,6 +70,7 @@ async function start() {
   await initQueue(io);
   setupSocketHandlers(io);
   setupBattleScheduler(io);
+  app.set('io', io);
   server.listen(PORT, () => logger.info(`CodeArena server running on port ${PORT}`));
 }
 

@@ -49,29 +49,29 @@ const PREDEFINED_HINTS = {
 };
 
 async function generateAIHint(problem, code, hintNumber, language) {
-  if (!process.env.OPENAI_API_KEY) return null;
+  if (!process.env.GROQ_API_KEY) return null;
 
   try {
-    const OpenAI = require('openai');
-    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    const Groq = require('groq-sdk');
+    const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
     const hintInstructions = [
-      'Give a very high-level conceptual hint only. No code, no specific algorithm names. Just a question or observation to guide their thinking.',
-      'Give a more specific hint about the approach or data structure to use. Still no code, but you can name the technique.',
-      'Explain the core logic and algorithm clearly. Describe the steps in plain English. Absolutely no code — only the logical approach.',
+      'Give a very high-level conceptual hint only. No code, no algorithm names. Just a guiding question or observation.',
+      'Give a more specific hint about the data structure or approach to use. No code, but you can name the technique.',
+      'Explain the core logic clearly step by step in plain English. Absolutely no code — logic only.',
     ];
 
-    const res = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
+    const res = await groq.chat.completions.create({
+      model: 'llama-3.3-70b-versatile',
       messages: [
         {
           role: 'system',
-          content: `You are a helpful coding mentor. Your job is to guide students with hints — never give them the full solution or actual code. Be concise (2-3 sentences max).`
+          content: 'You are a coding mentor. Guide students with hints only — never give the full solution or actual code. Be concise (2-3 sentences max).',
         },
         {
           role: 'user',
-          content: `Problem: ${problem.title}\n\nDescription: ${problem.description}\n\nStudent's current ${language} code:\n${code || '(no code written yet)'}\n\nHint ${hintNumber}/3: ${hintInstructions[hintNumber - 1]}`
-        }
+          content: `Problem: ${problem.title}\n\nDescription: ${problem.description.slice(0, 500)}\n\nStudent's ${language} code so far:\n${(code || '(none yet)').slice(0, 300)}\n\nHint ${hintNumber}/3: ${hintInstructions[hintNumber - 1]}`,
+        },
       ],
       max_tokens: 150,
       temperature: 0.7,
@@ -79,7 +79,7 @@ async function generateAIHint(problem, code, hintNumber, language) {
 
     return res.choices[0].message.content;
   } catch (err) {
-    logger.error('OpenAI hint error:', err);
+    logger.error('Groq hint error:', err.message);
     return null;
   }
 }

@@ -194,6 +194,34 @@ router.get('/history', authenticate, async (req, res) => {
   }
 });
 
+// POST /api/battles/:id/quit - quit the battle (opponent wins)
+router.post('/:id/quit', authenticate, async (req, res) => {
+  try {
+    const battle = await pool.query('SELECT * FROM battles WHERE id=$1 AND status=$2', [req.params.id, 'active']);
+    if (!battle.rows.length) return res.status(404).json({ error: 'No active battle found' });
+    const b = battle.rows[0];
+    if (b.player1_id !== req.user.id && b.player2_id !== req.user.id) return res.status(403).json({ error: 'Not your battle' });
+
+    const opponentId = b.player1_id === req.user.id ? b.player2_id : b.player1_id;
+
+    await pool.query(`UPDATE battles SET status='completed', winner_id=$1, ended_at=NOW() WHERE id=$2`, [opponentId, b.id]);
+    await pool.query('UPDATE users SET battle_losses=battle_losses+1 WHERE id=$1', [req.user.id]);
+    if (opponentId && !b.is_bot) {
+      await pool.query('UPDATE users SET battle_wins=battle_wins+1, points=points+50 WHERE id=$1', [opponentId]);
+    }
+
+    const { getRedis } = require('../services/redis');
+    const io = req.app.get('io');
+    io?.to(`battle:${b.id}`).emit('battle_end', { battleId: b.id, winnerId: opponentId, reason: 'opponent_quit' });
+    io?.to(`user:${opponentId}`).emit('battle_end', { battleId: b.id, winnerId: opponentId, won: true, reason: 'opponent_quit' });
+
+    res.json({ quit: true, opponentWins: true, message: 'You quit. Opponent wins.' });
+  } catch (err) {
+    logger.error('Quit error:', err);
+    res.status(500).json({ error: 'Failed to quit battle' });
+  }
+});
+
 // GET /api/battles/leaderboard - battle leaderboard
 router.get('/leaderboard', async (req, res) => {
   try {

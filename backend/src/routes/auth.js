@@ -4,6 +4,31 @@ const jwt = require('jsonwebtoken');
 const { body, validationResult } = require('express-validator');
 const { pool } = require('../models/db');
 const { authenticate } = require('../middleware/auth');
+const passport = require('passport');
+const GoogleStrategy = require('passport-google-oauth20').Strategy;
+
+// Setup Google OAuth strategy if credentials provided
+if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_ID !== 'your_google_client_id') {
+  passport.use(new GoogleStrategy({
+    clientID: process.env.GOOGLE_CLIENT_ID,
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+    callbackURL: process.env.GOOGLE_CALLBACK_URL || 'http://localhost:4000/api/auth/google/callback',
+  }, async (accessToken, refreshToken, profile, done) => {
+    try {
+      const email = profile.emails[0].value;
+      const name = profile.displayName.replace(/[^a-zA-Z0-9_]/g, '').slice(0, 30) || `user${Date.now()}`;
+      let user = await pool.query('SELECT * FROM users WHERE email=$1', [email]);
+      if (!user.rows.length) {
+        const username = name + Math.floor(Math.random() * 1000);
+        user = await pool.query(
+          `INSERT INTO users (username, email, password_hash, avatar_url) VALUES ($1,$2,$3,$4) RETURNING *`,
+          [username, email, 'google-oauth', profile.photos?.[0]?.value || null]
+        );
+      }
+      return done(null, user.rows[0]);
+    } catch (err) { return done(err); }
+  }));
+}
 
 const router = express.Router();
 
@@ -66,5 +91,17 @@ router.get('/me', authenticate, async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch user' });
   }
 });
+
+// Google OAuth routes
+router.get('/google', passport.authenticate('google', { scope: ['profile', 'email'], session: false }));
+
+router.get('/google/callback',
+  passport.authenticate('google', { failureRedirect: `${process.env.FRONTEND_URL}/login?error=oauth`, session: false }),
+  (req, res) => {
+    const user = req.user;
+    const token = jwt.sign({ id: user.id, username: user.username, role: user.role }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRES_IN });
+    res.redirect(`${process.env.FRONTEND_URL}/auth/callback?token=${token}&username=${encodeURIComponent(user.username)}&id=${user.id}&role=${user.role}`);
+  }
+);
 
 module.exports = router;
