@@ -51,3 +51,8 @@ export const contestsApi = {
   list: () => api.get('/contests'),
   get: (id: string) => api.get(`/contests/${id}`),
 };
+
+export const hintsApi = {
+  getHint: (data: { problemId: string; code: string; language: string }) => api.post('/hints', data),
+  getStatus: (problemId: string) => api.get(`/hints/status/${problemId}`),
+};

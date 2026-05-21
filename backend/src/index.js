@@ -11,6 +11,7 @@ const problemRoutes = require('./routes/problems');
 const submissionRoutes = require('./routes/submissions');
 const leaderboardRoutes = require('./routes/leaderboard');
 const contestRoutes = require('./routes/contests');
+const hintRoutes = require('./routes/hints');
 const { initDB } = require('./models/db');
 const { initRedis } = require('./services/redis');
 const { initQueue } = require('./services/queue');
@@ -36,6 +37,7 @@ app.use('/api/problems', problemRoutes);
 app.use('/api/submissions', submissionRoutes);
 app.use('/api/leaderboard', leaderboardRoutes);
 app.use('/api/contests', contestRoutes);
+app.use('/api/hints', hintRoutes);
 
 app.get('/health', (req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString() }));
 
