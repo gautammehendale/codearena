@@ -15,19 +15,21 @@ interface AdminUser {
 export default function AdminPage() {
   const router = useRouter();
   const { user } = useAuthStore();
+  const _hydrated = useAuthStore(s => s._hydrated);
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [stats, setStats] = useState<any>({});
 
   useEffect(() => {
+    if (!_hydrated) return;
     if (!user) { router.push('/login'); return; }
     if (user.role !== 'admin') { router.push('/'); return; }
     Promise.all([
       api.get('/stats/admin/users').then(r => setUsers(r.data)),
       api.get('/stats/public').then(r => setStats(r.data)),
     ]).catch(() => router.push('/')).finally(() => setLoading(false));
-  }, [user]);
+  }, [user, _hydrated]);
 
   const filtered = users.filter(u =>
     u.username.toLowerCase().includes(search.toLowerCase()) ||

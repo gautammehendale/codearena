@@ -36,9 +36,11 @@ export default function ProfilePage() {
   const [rank, setRank] = useState<any>(null);
   const [skills, setSkills] = useState<any[]>([]);
   const [badges, setBadges] = useState<any[]>([]);
+  const _hydrated = useAuthStore(s => s._hydrated);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!_hydrated) return;
     if (!user) { router.push('/login'); return; }
     Promise.all([
       authApi.me().then(r => setProfile(r.data)),
@@ -47,7 +49,7 @@ export default function ProfilePage() {
       api.get('/skills/heatmap').then(r => setSkills(r.data)).catch(() => {}),
       api.get('/badges/my').then(r => setBadges(r.data)).catch(() => {}),
     ]).finally(() => setLoading(false));
-  }, [user, router]);
+  }, [user, router, _hydrated]);
 
   if (loading || !profile) return <div className="flex items-center justify-center min-h-screen"><Loader className="animate-spin text-blue-400" size={32} /></div>;
 

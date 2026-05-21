@@ -13,8 +13,10 @@ interface User {
 interface AuthStore {
   user: User | null;
   token: string | null;
+  _hydrated: boolean;
   setAuth: (user: User, token: string) => void;
   logout: () => void;
+  setHydrated: () => void;
 }
 
 export const useAuthStore = create<AuthStore>()(
@@ -22,6 +24,7 @@ export const useAuthStore = create<AuthStore>()(
     (set) => ({
       user: null,
       token: null,
+      _hydrated: false,
       setAuth: (user, token) => {
         localStorage.setItem('token', token);
         set({ user, token });
@@ -30,7 +33,13 @@ export const useAuthStore = create<AuthStore>()(
         localStorage.removeItem('token');
         set({ user: null, token: null });
       },
+      setHydrated: () => set({ _hydrated: true }),
     }),
-    { name: 'auth-store' }
+    {
+      name: 'auth-store',
+      onRehydrateStorage: () => (state) => {
+        state?.setHydrated();
+      },
+    }
   )
 );
