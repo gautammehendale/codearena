@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { Swords, Play, Loader, CheckCircle, XCircle, Send, Trophy, Clock, ChevronDown, ChevronUp, X } from 'lucide-react';
@@ -99,6 +99,29 @@ export default function BattleArenaPage() {
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<any>(null);
   const [runResult, setRunResult] = useState<any>(null);
+  const [panelHeight, setPanelHeight] = useState(180);
+  const draggingRef = useRef(false);
+  const dragStartY = useRef(0);
+  const dragStartH = useRef(0);
+
+  const onDragStart = useCallback((e: React.MouseEvent) => {
+    draggingRef.current = true;
+    dragStartY.current = e.clientY;
+    dragStartH.current = panelHeight;
+    e.preventDefault();
+  }, [panelHeight]);
+
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      if (!draggingRef.current) return;
+      const dy = dragStartY.current - e.clientY;
+      setPanelHeight(Math.max(100, Math.min(500, dragStartH.current + dy)));
+    };
+    const onUp = () => { draggingRef.current = false; };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
+  }, []);
   const [myProgress, setMyProgress] = useState({ testsPassed: 0, totalTests: 0, solved: false });
   const [oppProgress, setOppProgress] = useState({ testsPassed: 0, totalTests: 0, solved: false });
   const [winner, setWinner] = useState<string | null>(null);
@@ -412,12 +435,33 @@ export default function BattleArenaPage() {
               <MonacoEditor height="100%" language={language} value={code} onChange={v => setCode(v || '')}
                 theme="vs-dark" options={{ fontSize: 13, minimap: { enabled: false }, padding: { top: 12 } }} />
             </div>
-            {runResult && <RunPanel result={runResult} onClose={() => setRunResult(null)} />}
-            {result && (
-              <div className="border-t border-gray-800 p-3 bg-gray-900/50">
-                <div className={`flex items-center gap-2 text-sm font-semibold ${result.status==='Accepted'?'text-green-400':'text-red-400'}`}>
-                  {result.status==='Accepted' ? <CheckCircle size={16}/> : <XCircle size={16}/>} {result.status}
-                  {result.runtime && <span className="text-gray-400 font-normal text-xs ml-1">· {result.runtime}ms</span>}
+            {/* Draggable result panel */}
+            {(runResult || result) && (
+              <div style={{ height: panelHeight }} className="border-t border-gray-800 flex flex-col overflow-hidden">
+                <div onMouseDown={onDragStart}
+                  className="h-1.5 bg-gray-800 hover:bg-blue-500/50 cursor-row-resize flex items-center justify-center group flex-shrink-0 transition-colors">
+                  <div className="w-8 h-0.5 bg-gray-600 group-hover:bg-blue-400 rounded-full transition-colors" />
+                </div>
+                <div className="flex-1 overflow-y-auto">
+                  {runResult && <RunPanel result={runResult} onClose={() => setRunResult(null)} />}
+                  {result && !runResult && (
+                    <div className="p-3 bg-gray-900/60 h-full">
+                      <div className={`flex items-center gap-2 text-sm font-semibold mb-2 ${result.status==='Accepted'?'text-green-400':'text-red-400'}`}>
+                        {result.status==='Accepted'?<CheckCircle size={15}/>:<XCircle size={15}/>} {result.status}
+                        {result.runtime && <span className="text-gray-400 font-normal text-xs">· {result.runtime}ms</span>}
+                        {result.status==='Accepted' && <span className="ml-auto text-xs bg-green-500/10 text-green-400 px-2 py-0.5 rounded-full">All tests passed ✓</span>}
+                      </div>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        {result.testResults?.map((tr: any, i: number) => (
+                          <div key={i} className={`text-xs px-2 py-1.5 rounded-lg flex items-center gap-1.5 ${tr.passed?'bg-green-900/20 text-green-300 border border-green-800/40':'bg-red-900/20 text-red-300 border border-red-800/40'}`}>
+                            {tr.passed?<CheckCircle size={11}/>:<XCircle size={11}/>}
+                            Test {tr.testCase}: {tr.passed?'Passed':tr.status}
+                            {tr.runtime && <span className="ml-auto text-gray-500">{tr.runtime}ms</span>}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
