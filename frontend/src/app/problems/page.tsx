@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Search, Filter, CheckCircle2 } from 'lucide-react';
+import { Search, Loader } from 'lucide-react';
 import { problemsApi } from '@/lib/api';
 
 interface Problem {
@@ -16,24 +16,43 @@ export default function ProblemsPage() {
   const [search, setSearch] = useState('');
   const [difficulty, setDifficulty] = useState('');
   const [loading, setLoading] = useState(true);
+  const [waking, setWaking] = useState(false);
+  const [error, setError] = useState('');
+
+  const fetchProblems = async (s: string, d: string) => {
+    setLoading(true); setError('');
+    const wakeTimer = setTimeout(() => setWaking(true), 5000); // show wake-up msg after 5s
+    try {
+      const res = await problemsApi.list({ search: s, difficulty: d, limit: 200 } as any);
+      setProblems(res.data.problems || []);
+      setWaking(false);
+    } catch (err: any) {
+      setError('Server is waking up. Retrying...');
+      setWaking(true);
+      // Auto-retry once after 10s
+      setTimeout(() => fetchProblems(s, d), 10000);
+    } finally {
+      clearTimeout(wakeTimer);
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    setLoading(true);
-    const t = setTimeout(async () => {
-      try {
-        const res = await problemsApi.list({ search, difficulty, limit: 200 } as any);
-        setProblems(res.data.problems);
-      } catch {}
-      setLoading(false);
-    }, 300);
+    const t = setTimeout(() => fetchProblems(search, difficulty), 300);
     return () => clearTimeout(t);
   }, [search, difficulty]);
 
   return (
     <div className="max-w-6xl mx-auto px-6 pt-24 pb-12">
+      {waking && (
+        <div className="mb-4 px-4 py-2.5 bg-yellow-900/30 border border-yellow-500/30 rounded-lg text-yellow-400 text-sm flex items-center gap-2">
+          <Loader size={14} className="animate-spin" />
+          Server is waking up (free tier sleeps after inactivity) — this takes ~30 seconds. Hang tight...
+        </div>
+      )}
       <div className="flex items-center justify-between mb-8">
         <h1 className="text-3xl font-bold">Problems</h1>
-        <span className="text-gray-400 text-sm">{problems.length} problems</span>
+        <span className="text-gray-400 text-sm">{problems.length > 0 ? `${problems.length} problems` : loading ? 'Loading...' : '0 problems'}</span>
       </div>
 
       <div className="flex gap-4 mb-6">

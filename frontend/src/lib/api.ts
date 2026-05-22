@@ -1,8 +1,9 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api',
+  baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api',
   withCredentials: true,
+  timeout: 60000, // 60s timeout — Render free tier can take 50s to wake up
 });
 
 api.interceptors.request.use((config) => {
