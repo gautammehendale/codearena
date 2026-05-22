@@ -9,7 +9,11 @@ function getNextBattleTime() {
   const now = new Date();
   const battle = new Date(now);
   battle.setMinutes(0, 0, 0);
-  if (now.getMinutes() >= 45) battle.setHours(battle.getHours() + 1);
+  // If we're past :00 (even 1 second), the current hour's battle is either live or past
+  // Next battle is always the upcoming hour
+  if (now.getMinutes() > 0 || now.getSeconds() > 0) {
+    battle.setHours(battle.getHours() + 1);
+  }
   return battle;
 }
 

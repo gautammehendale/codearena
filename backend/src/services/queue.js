@@ -32,7 +32,6 @@ async function executeCode(code, language, testCases, timeLimit, memoryLimit) {
   return runCode(code, language, testCases, timeLimit, memoryLimit);
 }
 
-module.exports.executeCode = executeCode;
 
 let submissionQueue;
 
@@ -176,4 +175,4 @@ async function addSubmission(data) {
   return submissionQueue.add(data, { attempts: 2, backoff: { type: 'fixed', delay: 2000 } });
 }
 
-module.exports = { initQueue, addSubmission };
+module.exports = { initQueue, addSubmission, executeCode };
