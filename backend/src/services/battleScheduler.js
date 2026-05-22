@@ -1,7 +1,11 @@
 const { pool } = require('../models/db');
 const logger = require('../utils/logger');
 
-const BOT_SOLVE_TIMES = { Easy: [8, 12], Medium: [15, 25], Hard: [30, 50] };
+const BOT_SOLVE_TIMES = { Easy: [3, 5], Medium: [6, 9], Hard: [12, 18] };
+
+const ENROLL_CUTOFF = { h: 17, m: 15 };  // 5:15 PM
+const LOBBY_TIME   = { h: 17, m: 25 };  // 5:25 PM
+const BATTLE_TIME  = { h: 17, m: 30 };  // 5:30 PM
 
 function randBetween(a, b) { return Math.floor(Math.random() * (b - a + 1)) + a; }
 
@@ -137,17 +141,16 @@ async function endBattle(io, battleId, winnerId) {
 }
 
 function setupBattleScheduler(io) {
-  // Check every minute for scheduled events
   setInterval(async () => {
     const now = new Date();
     const h = now.getHours(), m = now.getMinutes();
 
-    if (h === 16 && m === 0) await runMatchmaking(io);
-    if (h === 17 && m === 55) await openLobby(io);
-    if (h === 18 && m === 0) await startBattles(io);
+    if (h === ENROLL_CUTOFF.h && m === ENROLL_CUTOFF.m) await runMatchmaking(io);
+    if (h === LOBBY_TIME.h   && m === LOBBY_TIME.m)     await openLobby(io);
+    if (h === BATTLE_TIME.h  && m === BATTLE_TIME.m)    await startBattles(io);
   }, 60000);
 
-  logger.info('Battle scheduler initialized (matchmaking@16:00, lobby@17:55, start@18:00)');
+  logger.info(`Battle scheduler: enroll<${ENROLL_CUTOFF.h}:${String(ENROLL_CUTOFF.m).padStart(2,'0')}, lobby@${LOBBY_TIME.h}:${String(LOBBY_TIME.m).padStart(2,'0')}, start@${BATTLE_TIME.h}:${String(BATTLE_TIME.m).padStart(2,'0')}`);
 }
 
 module.exports = { setupBattleScheduler, endBattle, runMatchmaking };

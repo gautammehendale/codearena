@@ -5,9 +5,12 @@ const logger = require('../utils/logger');
 
 const router = express.Router();
 
-const BATTLE_HOUR = 18; // 6 PM
-const ENROLL_CUTOFF_HOUR = 16; // 4 PM
-const LOBBY_MINUTES_BEFORE = 5;
+const BATTLE_HOUR = 17;
+const BATTLE_MIN = 30; // 5:30 PM
+const ENROLL_CUTOFF_HOUR = 17;
+const ENROLL_CUTOFF_MIN = 15; // 5:15 PM
+const LOBBY_HOUR = 17;
+const LOBBY_MIN = 25; // 5:25 PM
 
 function getTodayDate() {
   return new Date().toISOString().split('T')[0];
@@ -15,7 +18,7 @@ function getTodayDate() {
 
 function getBattleScheduledAt(dateStr) {
   const d = new Date(dateStr);
-  d.setHours(BATTLE_HOUR, 0, 0, 0);
+  d.setHours(BATTLE_HOUR, BATTLE_MIN, 0, 0);
   return d;
 }
 
@@ -24,10 +27,11 @@ router.get('/schedule', async (req, res) => {
   const today = getTodayDate();
   const now = new Date();
   const cutoff = new Date(today);
-  cutoff.setHours(ENROLL_CUTOFF_HOUR, 0, 0, 0);
+  cutoff.setHours(ENROLL_CUTOFF_HOUR, ENROLL_CUTOFF_MIN, 0, 0);
   const battleTime = new Date(today);
-  battleTime.setHours(BATTLE_HOUR, 0, 0, 0);
-  const lobbyTime = new Date(battleTime.getTime() - LOBBY_MINUTES_BEFORE * 60000);
+  battleTime.setHours(BATTLE_HOUR, BATTLE_MIN, 0, 0);
+  const lobbyTime = new Date(today);
+  lobbyTime.setHours(LOBBY_HOUR, LOBBY_MIN, 0, 0);
 
   res.json({
     today,
@@ -45,7 +49,7 @@ router.post('/enroll', authenticate, async (req, res) => {
   const today = getTodayDate();
   const now = new Date();
   const cutoff = new Date(today);
-  cutoff.setHours(ENROLL_CUTOFF_HOUR, 0, 0, 0);
+  cutoff.setHours(ENROLL_CUTOFF_HOUR, ENROLL_CUTOFF_MIN, 0, 0);
 
   if (now >= cutoff) return res.status(400).json({ error: 'Enrollment closed for today. Opens again tomorrow.' });
 
@@ -67,7 +71,7 @@ router.delete('/enroll', authenticate, async (req, res) => {
   const today = getTodayDate();
   const now = new Date();
   const cutoff = new Date(today);
-  cutoff.setHours(ENROLL_CUTOFF_HOUR, 0, 0, 0);
+  cutoff.setHours(ENROLL_CUTOFF_HOUR, ENROLL_CUTOFF_MIN, 0, 0);
 
   if (now >= cutoff) return res.status(400).json({ error: 'Cannot withdraw after enrollment closes' });
 
