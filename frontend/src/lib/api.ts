@@ -38,6 +38,7 @@ export const problemsApi = {
 
 export const submissionsApi = {
   submit: (data: { problemId: string; language: string; code: string; contestId?: string }) => api.post('/submissions', data),
+  run: (data: { problemId: string; language: string; code: string }) => api.post('/submissions/run', data),
   get: (id: string) => api.get(`/submissions/${id}`),
   history: (params?: { page?: number; problemId?: string }) => api.get('/submissions/user/history', { params }),
 };

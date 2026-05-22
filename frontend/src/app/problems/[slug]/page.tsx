@@ -83,8 +83,10 @@ export default function ProblemPage() {
   const [language, setLanguage] = useState('python');
   const [code, setCode] = useState(STARTERS.python);
   const [submitting, setSubmitting] = useState(false);
+  const [running, setRunning] = useState(false);
   const [submissionId, setSubmissionId] = useState<string | null>(null);
   const [result, setResult] = useState<any>(null);
+  const [runResult, setRunResult] = useState<any>(null);
   const [activeTab, setActiveTab] = useState<'description' | 'hints'>('description');
   const [hints, setHints] = useState<Hint[]>([]);
   const [hintsUsed, setHintsUsed] = useState(0);
@@ -110,6 +112,17 @@ export default function ProblemPage() {
     socket.on('submission_update', handler);
     return () => { socket.off('submission_update', handler); };
   }, [submissionId, user]);
+
+  const handleRun = async () => {
+    if (!user) { window.location.href = '/login'; return; }
+    setRunning(true); setRunResult(null);
+    try {
+      const res = await submissionsApi.run({ problemId: problem.id, language, code });
+      setRunResult(res.data);
+    } catch (err: any) {
+      setRunResult({ status: 'Error', testResults: [], error: err.response?.data?.error || 'Run failed' });
+    } finally { setRunning(false); }
+  };
 
   const handleSubmit = async () => {
     if (!user) { window.location.href = '/login'; return; }
@@ -280,10 +293,15 @@ export default function ProblemPage() {
               {loadingHint ? <Loader size={14} className="animate-spin" /> : <Lightbulb size={14} />}
               {hintsUsed >= 3 ? 'No hints' : `Hint (${3 - hintsUsed})`}
             </button>
-            <button onClick={handleSubmit} disabled={submitting}
+            <button onClick={handleRun} disabled={running || submitting}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg bg-gray-700 hover:bg-gray-600 text-gray-200 border border-gray-600 transition-colors disabled:opacity-40">
+              {running ? <Loader size={14} className="animate-spin" /> : <Play size={14} />}
+              {running ? 'Running...' : 'Run'}
+            </button>
+            <button onClick={handleSubmit} disabled={submitting || running}
               className="btn-primary flex items-center gap-2 text-sm">
               {submitting ? <Loader size={15} className="animate-spin" /> : <Play size={15} />}
-              {submitting ? 'Running...' : 'Submit'}
+              {submitting ? 'Judging...' : 'Submit'}
             </button>
           </div>
         </div>
@@ -309,7 +327,27 @@ export default function ProblemPage() {
           />
         </div>
 
-        {/* Results */}
+        {/* Run Results (sample test cases) */}
+        {runResult && (
+          <div className="border-t border-gray-800 bg-gray-900/60 max-h-44 overflow-y-auto">
+            <div className={`flex items-center gap-2.5 px-4 py-2.5 text-sm font-semibold border-b border-gray-800 ${runResult.status === 'Accepted' ? 'text-green-400' : 'text-red-400'}`}>
+              {runResult.status === 'Accepted' ? <CheckCircle size={16} /> : <XCircle size={16} />}
+              {runResult.status === 'Accepted' ? 'Sample tests passed' : runResult.status}
+              <span className="ml-auto text-xs font-normal text-gray-500">2 sample test cases</span>
+            </div>
+            <div className="p-3 grid grid-cols-2 gap-2">
+              {runResult.testResults?.map((tr: any, i: number) => (
+                <div key={i} className={`text-xs px-3 py-2 rounded-lg flex items-center gap-2 ${tr.passed ? 'bg-green-900/20 text-green-300 border border-green-800/40' : 'bg-red-900/20 text-red-300 border border-red-800/40'}`}>
+                  {tr.passed ? <CheckCircle size={12} /> : <XCircle size={12} />}
+                  <span>Test {tr.testCase}: {tr.passed ? 'Passed' : tr.status}</span>
+                  {tr.runtime && <span className="ml-auto text-gray-500">{tr.runtime}ms</span>}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Submit Results (all test cases) */}
         {result && (
           <div className="border-t border-gray-800 bg-gray-900/60 max-h-52 overflow-y-auto">
             <div className={`flex items-center gap-2.5 px-4 py-3 font-semibold border-b border-gray-800 ${statusColor[result.status] || 'text-white'}`}>

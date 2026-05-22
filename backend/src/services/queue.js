@@ -24,17 +24,15 @@ function createRedisClient(url) {
 }
 
 async function executeCode(code, language, testCases, timeLimit, memoryLimit) {
-  if (judge0Available()) {
-    logger.info('Using Judge0 API for execution');
+  if (process.env.NODE_ENV === 'production' || judge0Available()) {
+    logger.info('Using Judge0 CE for execution');
     return runWithJudge0(code, language, testCases, timeLimit, memoryLimit);
-  }
-  if (process.env.NODE_ENV === 'production') {
-    logger.info('Using Piston API for execution');
-    return runWithPiston(code, language, testCases, timeLimit);
   }
   logger.info('Using Docker sandbox for execution');
   return runCode(code, language, testCases, timeLimit, memoryLimit);
 }
+
+module.exports.executeCode = executeCode;
 
 let submissionQueue;
 

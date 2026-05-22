@@ -2,11 +2,38 @@ const express = require('express');
 const { body, validationResult } = require('express-validator');
 const { pool } = require('../models/db');
 const { authenticate } = require('../middleware/auth');
-const { addSubmission } = require('../services/queue');
+const { addSubmission, executeCode } = require('../services/queue');
 
 const router = express.Router();
 
 const SUPPORTED_LANGUAGES = ['python', 'javascript', 'java', 'cpp', 'c'];
+
+// POST /api/submissions/run — quick run against first 2 test cases (synchronous)
+router.post('/run', authenticate, [
+  body('problemId').isUUID(),
+  body('language').isIn(SUPPORTED_LANGUAGES),
+  body('code').notEmpty().isLength({ max: 50000 }),
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+
+  const { problemId, language, code } = req.body;
+  try {
+    const problem = await pool.query('SELECT test_cases, time_limit, memory_limit FROM problems WHERE id=$1', [problemId]);
+    if (!problem.rows.length) return res.status(404).json({ error: 'Problem not found' });
+
+    const allCases = problem.rows[0].test_cases;
+    const sampleCases = allCases.slice(0, 2); // only first 2 test cases
+
+    const results = await executeCode(code, language, sampleCases, problem.rows[0].time_limit, problem.rows[0].memory_limit);
+    const allPassed = results.every(r => r.passed);
+    const status = allPassed ? 'Accepted' : results.find(r => !r.passed)?.status || 'Wrong Answer';
+
+    res.json({ status, testResults: results, sampleOnly: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Execution failed: ' + err.message });
+  }
+});
 
 router.post('/', authenticate, [
   body('problemId').isUUID(),
