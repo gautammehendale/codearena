@@ -1,77 +1,88 @@
 const { pool } = require('../models/db');
 const logger = require('../utils/logger');
 
-const BOT_SOLVE_TIMES = { Easy: [3, 5], Medium: [6, 9], Hard: [12, 18] };
+// Battles happen every hour on the hour
+// Enrollment opens :30 (30 mins before)
+// Matching runs :45 (15 mins before)
+// Battle starts :00 (top of each hour)
 
-const ENROLL_CUTOFF = { h: 17, m: 15 };  // 5:15 PM
-const LOBBY_TIME   = { h: 17, m: 25 };  // 5:25 PM
-const BATTLE_TIME  = { h: 17, m: 30 };  // 5:30 PM
-
+const BOT_SOLVE_TIMES = { Easy: [3, 8], Medium: [8, 15], Hard: [15, 25] };
 function randBetween(a, b) { return Math.floor(Math.random() * (b - a + 1)) + a; }
-
 function getTodayDate() { return new Date().toISOString().split('T')[0]; }
 
-async function runMatchmaking(io) {
+// Returns scheduled battle time (top of next hour, or current hour if before :45)
+function getNextBattleTime() {
+  const now = new Date();
+  const battle = new Date(now);
+  battle.setMinutes(0, 0, 0);
+  // If we're past :45, next battle is next hour
+  if (now.getMinutes() >= 45) battle.setHours(battle.getHours() + 1);
+  return battle;
+}
+
+async function runMatchmaking(io, battleTime) {
   const today = getTodayDate();
-  logger.info('Running battle matchmaking for', today);
+  const battleDate = battleTime.toISOString().split('T')[0];
+  const battleTimeStr = battleTime.toISOString();
+  logger.info(`Running matchmaking for battle at ${battleTimeStr}`);
 
   try {
+    // Get all enrolled users for this battle slot
     const enrolled = await pool.query(
-      `SELECT user_id FROM battle_enrollments WHERE battle_date=$1 AND status='enrolled' ORDER BY created_at`,
-      [today]
+      `SELECT user_id FROM battle_enrollments
+       WHERE battle_date=$1 AND status='enrolled'
+       AND scheduled_battle_time=$2
+       ORDER BY created_at`,
+      [battleDate, battleTimeStr]
     );
-    const users = enrolled.rows.map(r => r.user_id);
-    if (users.length === 0) { logger.info('No enrollments for today'); return; }
 
-    const scheduledAt = new Date(today);
-    scheduledAt.setHours(18, 0, 0, 0);
+    const users = enrolled.rows.map(r => r.user_id);
+    if (users.length === 0) { logger.info('No enrollments for this slot'); return; }
 
     const pairs = [];
     for (let i = 0; i < users.length - 1; i += 2) pairs.push([users[i], users[i + 1]]);
-    if (users.length % 2 === 1) pairs.push([users[users.length - 1], null]); // bot match
+    if (users.length % 2 === 1) pairs.push([users[users.length - 1], null]);
 
     for (const [p1, p2] of pairs) {
       const isBot = p2 === null;
       const result = await pool.query(
         `INSERT INTO battles (player1_id, player2_id, is_bot, status, battle_date, scheduled_at)
-         VALUES ($1, $2, $3, 'matched', $4, $5)
-         ON CONFLICT DO NOTHING RETURNING id`,
-        [p1, isBot ? p1 : p2, isBot, today, scheduledAt]
+         VALUES ($1,$2,$3,'matched',$4,$5) RETURNING id`,
+        [p1, isBot ? p1 : p2, isBot, battleDate, battleTimeStr]
       );
-
       if (result.rows.length) {
         await pool.query(
-          `UPDATE battle_enrollments SET status='matched' WHERE user_id=ANY($1) AND battle_date=$2`,
-          [[p1, ...(isBot ? [] : [p2])], today]
+          `UPDATE battle_enrollments SET status='matched' WHERE user_id=ANY($1) AND battle_date=$2 AND scheduled_battle_time=$3`,
+          [[p1, ...(isBot ? [] : [p2])], battleDate, battleTimeStr]
         );
-        logger.info(`Matched: ${p1} vs ${isBot ? 'BOT' : p2}`);
+        io?.to(`user:${p1}`).emit('battle_matched', { battleId: result.rows[0].id });
+        if (!isBot) io?.to(`user:${p2}`).emit('battle_matched', { battleId: result.rows[0].id });
       }
     }
-
-    io?.to('battles').emit('matchmaking_complete', { date: today, totalPairs: pairs.length });
+    io?.to('battles').emit('matchmaking_complete', { date: battleDate, pairs: pairs.length });
   } catch (err) {
     logger.error('Matchmaking error:', err);
   }
 }
 
-async function openLobby(io) {
-  const today = getTodayDate();
+async function openLobby(io, battleTime) {
+  const battleTimeStr = battleTime.toISOString();
   const updated = await pool.query(
-    `UPDATE battles SET status='lobby' WHERE battle_date=$1 AND status='matched' RETURNING id, player1_id, player2_id, is_bot`,
-    [today]
+    `UPDATE battles SET status='lobby' WHERE scheduled_at=$1 AND status='matched' RETURNING id, player1_id, player2_id, is_bot`,
+    [battleTimeStr]
   );
-  logger.info(`Opened lobby for ${updated.rowCount} battles`);
   for (const b of updated.rows) {
     io?.to(`battle:${b.id}`).emit('battle_lobby_open', { battleId: b.id });
     io?.to(`user:${b.player1_id}`).emit('battle_lobby_open', { battleId: b.id });
     if (!b.is_bot) io?.to(`user:${b.player2_id}`).emit('battle_lobby_open', { battleId: b.id });
   }
+  logger.info(`Opened lobby for ${updated.rowCount} battles at ${battleTimeStr}`);
 }
 
-async function startBattles(io) {
-  const today = getTodayDate();
+async function startBattles(io, battleTime) {
+  const battleTimeStr = battleTime.toISOString();
   const lobbies = await pool.query(
-    `SELECT * FROM battles WHERE battle_date=$1 AND status='lobby'`, [today]
+    `SELECT * FROM battles WHERE scheduled_at=$1 AND status='lobby'`, [battleTimeStr]
   );
 
   for (const b of lobbies.rows) {
@@ -81,76 +92,63 @@ async function startBattles(io) {
       [difficulty]
     );
     if (!problem.rows.length) continue;
-
     const probId = problem.rows[0].id;
-    const now = new Date();
     await pool.query(
-      `UPDATE battles SET status='active', problem_id=$1, difficulty=$2, started_at=$3 WHERE id=$4`,
-      [probId, difficulty, now, b.id]
+      `UPDATE battles SET status='active', problem_id=$1, difficulty=$2, started_at=NOW() WHERE id=$3`,
+      [probId, difficulty, b.id]
     );
-
-    // Init progress rows
     await pool.query(`INSERT INTO battle_progress (battle_id, user_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`, [b.id, b.player1_id]);
     if (!b.is_bot) await pool.query(`INSERT INTO battle_progress (battle_id, user_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`, [b.id, b.player2_id]);
 
     io?.to(`battle:${b.id}`).emit('battle_start', { battleId: b.id, problemId: probId, difficulty });
-    io?.to(`user:${b.player1_id}`).emit('battle_start', { battleId: b.id, problemId: probId, difficulty });
-    if (!b.is_bot) io?.to(`user:${b.player2_id}`).emit('battle_start', { battleId: b.id, problemId: probId, difficulty });
+    io?.to(`user:${b.player1_id}`).emit('battle_start', { battleId: b.id, problemId: probId });
+    if (!b.is_bot && b.player2_id) io?.to(`user:${b.player2_id}`).emit('battle_start', { battleId: b.id, problemId: probId });
 
-    // Schedule bot solve if applicable
     if (b.is_bot) {
       const [min, max] = BOT_SOLVE_TIMES[difficulty] || BOT_SOLVE_TIMES.Medium;
-      const botSolveMs = randBetween(min, max) * 60000;
-      setTimeout(() => resolveBotWin(io, b.id, b.player1_id), botSolveMs);
-      logger.info(`Bot will solve in ${botSolveMs / 60000} mins for battle ${b.id}`);
+      setTimeout(() => endBattle(io, b.id, null), randBetween(min, max) * 60000);
     }
-
-    // Auto-end battle after 2 hours
-    setTimeout(() => endBattle(io, b.id, null), 2 * 60 * 60 * 1000);
+    setTimeout(() => endBattle(io, b.id, null), 90 * 60 * 1000);
   }
   logger.info(`Started ${lobbies.rowCount} battles`);
 }
 
-async function resolveBotWin(io, battleId, playerId) {
-  const battle = await pool.query('SELECT * FROM battles WHERE id=$1 AND status=$2', [battleId, 'active']);
-  if (!battle.rows.length) return;
-  // Bot doesn't actually win in this implementation — player gets the win if they solve it, otherwise draw
-  logger.info(`Bot solve time reached for battle ${battleId}, battle continues`);
-}
-
 async function endBattle(io, battleId, winnerId) {
-  const battle = await pool.query('SELECT * FROM battles WHERE id=$1 AND status=\'active\'', [battleId]);
+  const battle = await pool.query(`SELECT * FROM battles WHERE id=$1 AND status='active'`, [battleId]);
   if (!battle.rows.length) return;
-
   const b = battle.rows[0];
-  await pool.query(
-    `UPDATE battles SET status='completed', winner_id=$1, ended_at=NOW() WHERE id=$2`,
-    [winnerId, battleId]
-  );
-
+  await pool.query(`UPDATE battles SET status='completed', winner_id=$1, ended_at=NOW() WHERE id=$2`, [winnerId, battleId]);
   if (winnerId) {
     await pool.query('UPDATE users SET battle_wins=battle_wins+1, points=points+50 WHERE id=$1', [winnerId]);
     const loserId = b.player1_id === winnerId ? b.player2_id : b.player1_id;
     if (loserId && !b.is_bot) await pool.query('UPDATE users SET battle_losses=battle_losses+1 WHERE id=$1', [loserId]);
   }
-
   io?.to(`battle:${battleId}`).emit('battle_end', { battleId, winnerId });
   io?.to(`user:${b.player1_id}`).emit('battle_end', { battleId, winnerId, won: b.player1_id === winnerId });
   if (!b.is_bot && b.player2_id) io?.to(`user:${b.player2_id}`).emit('battle_end', { battleId, winnerId, won: b.player2_id === winnerId });
-  logger.info(`Battle ${battleId} ended. Winner: ${winnerId || 'none'}`);
 }
 
 function setupBattleScheduler(io) {
   setInterval(async () => {
     const now = new Date();
-    const h = now.getHours(), m = now.getMinutes();
+    const m = now.getMinutes();
+    const nextBattle = getNextBattleTime();
 
-    if (h === ENROLL_CUTOFF.h && m === ENROLL_CUTOFF.m) await runMatchmaking(io);
-    if (h === LOBBY_TIME.h   && m === LOBBY_TIME.m)     await openLobby(io);
-    if (h === BATTLE_TIME.h  && m === BATTLE_TIME.m)    await startBattles(io);
+    // :30 = enrollment reminder (30 mins before next battle)
+    if (m === 30) {
+      logger.info(`Enrollment open for battle at ${nextBattle.toISOString()}`);
+      io?.to('battles').emit('enrollment_open', { battleTime: nextBattle.toISOString() });
+    }
+    // :45 = run matchmaking (15 mins before)
+    if (m === 45) await runMatchmaking(io, nextBattle);
+    // :55 = open lobby (5 mins before)
+    if (m === 55) await openLobby(io, nextBattle);
+    // :00 = start battles
+    if (m === 0) await startBattles(io, new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours(), 0, 0, 0));
+
   }, 60000);
 
-  logger.info(`Battle scheduler: enroll<${ENROLL_CUTOFF.h}:${String(ENROLL_CUTOFF.m).padStart(2,'0')}, lobby@${LOBBY_TIME.h}:${String(LOBBY_TIME.m).padStart(2,'0')}, start@${BATTLE_TIME.h}:${String(BATTLE_TIME.m).padStart(2,'0')}`);
+  logger.info('Battle scheduler: hourly battles — enroll@:30, match@:45, lobby@:55, start@:00');
 }
 
 module.exports = { setupBattleScheduler, endBattle, runMatchmaking };

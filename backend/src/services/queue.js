@@ -1,10 +1,27 @@
 const Bull = require('bull');
+const Redis = require('ioredis');
 const { runCode } = require('./judge');
 const { runWithJudge0, isAvailable: judge0Available } = require('./judge0');
 const { runWithPiston } = require('./piston');
 const { pool } = require('../models/db');
 const { updateLeaderboard, cacheDel } = require('./redis');
 const logger = require('../utils/logger');
+
+function createRedisClient(url) {
+  if (url) {
+    return new Redis(url, {
+      tls: url.startsWith('rediss://') ? { rejectUnauthorized: false } : undefined,
+      maxRetriesPerRequest: null,
+      enableReadyCheck: false,
+    });
+  }
+  return new Redis({
+    host: process.env.REDIS_HOST || 'localhost',
+    port: process.env.REDIS_PORT || 6379,
+    maxRetriesPerRequest: null,
+    enableReadyCheck: false,
+  });
+}
 
 async function executeCode(code, language, testCases, timeLimit, memoryLimit) {
   if (judge0Available()) {
@@ -23,10 +40,13 @@ let submissionQueue;
 
 async function initQueue(io) {
   const redisUrl = process.env.REDIS_URL;
-  submissionQueue = new Bull('submissions', redisUrl
-    ? { url: redisUrl, redis: { tls: redisUrl.startsWith('rediss://') ? { rejectUnauthorized: false } : undefined } }
-    : { redis: { host: process.env.REDIS_HOST || 'localhost', port: process.env.REDIS_PORT || 6379 } }
-  );
+  submissionQueue = new Bull('submissions', {
+    createClient: (type) => {
+      const client = createRedisClient(redisUrl);
+      if (type === 'subscriber') client.setMaxListeners(50);
+      return client;
+    }
+  });
 
   submissionQueue.process(3, async (job) => {
     const { submissionId, code, language, testCases, timeLimit, memoryLimit, userId, problemId } = job.data;

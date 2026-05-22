@@ -21,7 +21,7 @@ export default function ProblemsPage() {
     setLoading(true);
     const t = setTimeout(async () => {
       try {
-        const res = await problemsApi.list({ search, difficulty });
+        const res = await problemsApi.list({ search, difficulty, limit: 200 } as any);
         setProblems(res.data.problems);
       } catch {}
       setLoading(false);

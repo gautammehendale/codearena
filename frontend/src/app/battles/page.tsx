@@ -7,8 +7,9 @@ import { useAuthStore } from '@/lib/store';
 import { connectSocket } from '@/lib/socket';
 
 interface Schedule {
-  enrollmentOpen: boolean; enrollmentCutoff: string; battleTime: string;
-  lobbyTime: string; isLobbyOpen: boolean; isBattleActive: boolean; today: string;
+  enrollmentOpen: boolean; enrollmentOpens: string; nextBattleTime: string;
+  matchingTime: string; lobbyTime: string; isLobbyOpen: boolean; isBattleActive: boolean;
+  minutesUntilBattle: number;
 }
 
 function Countdown({ target }: { target: string }) {
@@ -90,9 +91,9 @@ export default function BattlesPage() {
       <div className="flex items-center gap-3 mb-2">
         <Swords className="text-purple-400" size={32} />
         <h1 className="text-3xl font-bold">1v1 Battles</h1>
-        <span className="px-2.5 py-0.5 bg-purple-500/20 text-purple-400 border border-purple-500/30 rounded-full text-xs">Daily @ 6 PM</span>
+        <span className="px-2.5 py-0.5 bg-purple-500/20 text-purple-400 border border-purple-500/30 rounded-full text-xs">Every Hour</span>
       </div>
-      <p className="text-gray-400 mb-8">Enroll by 5:15 PM. Get matched at 5:15 PM. Choose difficulty at 5:25 PM. Battle starts at 5:30 PM sharp.</p>
+      <p className="text-gray-400 mb-8">Battles happen every hour. Enrollment opens 30 mins before. Matching at 15 mins before. Battle starts on the hour.</p>
 
       {/* Active Battle Banner */}
       {activeBattle && (
@@ -116,9 +117,9 @@ export default function BattlesPage() {
           <h2 className="font-semibold mb-4 flex items-center gap-2"><Calendar size={18} className="text-blue-400" /> Today's Schedule</h2>
           <div className="space-y-3">
             {[
-              { label: 'Enrollment closes', time: schedule.enrollmentCutoff, done: !schedule.enrollmentOpen },
-              { label: 'Lobby opens', time: schedule.lobbyTime, done: schedule.isLobbyOpen || schedule.isBattleActive },
-              { label: 'Battle starts', time: schedule.battleTime, done: schedule.isBattleActive },
+              { label: 'Enrollment opens', time: schedule.enrollmentOpens, done: schedule.enrollmentOpen || schedule.isBattleActive },
+              { label: 'Matching', time: schedule.matchingTime, done: schedule.isLobbyOpen || schedule.isBattleActive },
+              { label: 'Battle starts', time: schedule.nextBattleTime, done: schedule.isBattleActive },
             ].map(({ label, time, done }) => (
               <div key={label} className={`flex items-center justify-between py-2 border-b border-gray-800/60 ${done ? 'opacity-50' : ''}`}>
                 <span className="text-sm text-gray-400 flex items-center gap-2">
@@ -133,13 +134,13 @@ export default function BattlesPage() {
             {schedule.enrollmentOpen && !schedule.isBattleActive && (
               <>
                 <p className="text-xs text-gray-500 mb-1">Enrollment closes in</p>
-                <Countdown target={schedule.enrollmentCutoff} />
+                <Countdown target={schedule.enrollmentOpens} />
               </>
             )}
             {!schedule.enrollmentOpen && !schedule.isBattleActive && (
               <>
                 <p className="text-xs text-gray-500 mb-1">Battle starts in</p>
-                <Countdown target={schedule.battleTime} />
+                <Countdown target={schedule.nextBattleTime} />
               </>
             )}
             {schedule.isBattleActive && <p className="text-green-400 font-semibold">⚔️ Battle is LIVE</p>}
