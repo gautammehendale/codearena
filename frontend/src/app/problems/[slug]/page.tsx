@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { Play, Clock, Cpu, CheckCircle, XCircle, Loader, Lightbulb, Lock, ChevronRight, ChevronDown, ChevronUp, X } from 'lucide-react';
@@ -144,6 +144,29 @@ export default function ProblemPage() {
   const [submissionId, setSubmissionId] = useState<string | null>(null);
   const [result, setResult] = useState<any>(null);
   const [runResult, setRunResult] = useState<any>(null);
+  const [panelHeight, setPanelHeight] = useState(220);
+  const draggingRef = useRef(false);
+  const dragStartY = useRef(0);
+  const dragStartH = useRef(0);
+
+  const onDragStart = useCallback((e: React.MouseEvent) => {
+    draggingRef.current = true;
+    dragStartY.current = e.clientY;
+    dragStartH.current = panelHeight;
+    e.preventDefault();
+  }, [panelHeight]);
+
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      if (!draggingRef.current) return;
+      const dy = dragStartY.current - e.clientY; // drag up = positive = bigger panel
+      setPanelHeight(Math.max(120, Math.min(600, dragStartH.current + dy)));
+    };
+    const onUp = () => { draggingRef.current = false; };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
+  }, []);
   const [activeTab, setActiveTab] = useState<'description' | 'hints'>('description');
   const [hints, setHints] = useState<Hint[]>([]);
   const [hintsUsed, setHintsUsed] = useState(0);
@@ -384,31 +407,41 @@ export default function ProblemPage() {
           />
         </div>
 
-        {/* Run Results */}
-        {runResult && (
-          <RunResultPanel result={runResult} onClose={() => setRunResult(null)} />
-        )}
-
-        {/* Submit Results (all test cases) */}
-        {result && (
-          <div className="border-t border-gray-800 bg-gray-900/60 max-h-52 overflow-y-auto">
-            <div className={`flex items-center gap-2.5 px-4 py-3 font-semibold border-b border-gray-800 ${statusColor[result.status] || 'text-white'}`}>
-              {result.status === 'Accepted' ? <CheckCircle size={18} /> : <XCircle size={18} />}
-              {result.status}
-              {result.runtime && <span className="text-gray-400 font-normal text-sm ml-1">· {result.runtime}ms</span>}
-              {result.status === 'Accepted' && <span className="ml-auto text-sm bg-green-500/10 text-green-400 px-3 py-0.5 rounded-full">All tests passed ✓</span>}
+        {/* Run Results — draggable panel */}
+        {(runResult || result) && (
+          <div style={{ height: panelHeight }} className="border-t border-gray-800 flex flex-col overflow-hidden">
+            {/* Drag handle */}
+            <div
+              onMouseDown={onDragStart}
+              className="h-1.5 bg-gray-800 hover:bg-blue-500/50 cursor-row-resize flex items-center justify-center group flex-shrink-0 transition-colors"
+              title="Drag to resize">
+              <div className="w-10 h-0.5 bg-gray-600 group-hover:bg-blue-400 rounded-full transition-colors" />
             </div>
-            <div className="p-3 grid grid-cols-2 gap-2">
-              {result.testResults?.map((tr: any, i: number) => (
-                <div key={i} className={`text-xs px-3 py-2 rounded-lg flex items-center gap-2 ${tr.passed ? 'bg-green-900/20 text-green-300 border border-green-800/40' : 'bg-red-900/20 text-red-300 border border-red-800/40'}`}>
-                  {tr.passed ? <CheckCircle size={12} /> : <XCircle size={12} />}
-                  <span>Test {tr.testCase}: {tr.passed ? 'Passed' : tr.status}</span>
-                  {tr.runtime && <span className="ml-auto text-gray-400">{tr.runtime}ms</span>}
+            <div className="flex-1 overflow-y-auto">
+              {runResult && <RunResultPanel result={runResult} onClose={() => setRunResult(null)} />}
+              {result && !runResult && (
+                <div className="p-3 bg-gray-900/60 h-full">
+                  <div className={`flex items-center gap-2.5 font-semibold mb-3 ${result.status === 'Accepted' ? 'text-green-400' : 'text-red-400'}`}>
+                    {result.status === 'Accepted' ? <CheckCircle size={18} /> : <XCircle size={18} />}
+                    {result.status}
+                    {result.runtime && <span className="text-gray-400 font-normal text-sm ml-1">· {result.runtime}ms</span>}
+                    {result.status === 'Accepted' && <span className="ml-auto text-sm bg-green-500/10 text-green-400 px-3 py-0.5 rounded-full">All tests passed ✓</span>}
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {result.testResults?.map((tr: any, i: number) => (
+                      <div key={i} className={`text-xs px-3 py-2 rounded-lg flex items-center gap-2 ${tr.passed ? 'bg-green-900/20 text-green-300 border border-green-800/40' : 'bg-red-900/20 text-red-300 border border-red-800/40'}`}>
+                        {tr.passed ? <CheckCircle size={12} /> : <XCircle size={12} />}
+                        <span>Test {tr.testCase}: {tr.passed ? 'Passed' : tr.status}</span>
+                        {tr.runtime && <span className="ml-auto text-gray-400">{tr.runtime}ms</span>}
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              ))}
+              )}
             </div>
           </div>
         )}
+
       </div>
     </div>
   );
