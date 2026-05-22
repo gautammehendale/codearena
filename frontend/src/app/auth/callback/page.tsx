@@ -1,10 +1,10 @@
 'use client';
-import { useEffect } from 'react';
+import { Suspense, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Loader } from 'lucide-react';
 import { useAuthStore } from '@/lib/store';
 
-export default function AuthCallbackPage() {
+function CallbackHandler() {
   const router = useRouter();
   const params = useSearchParams();
   const { setAuth } = useAuthStore();
@@ -28,5 +28,13 @@ export default function AuthCallbackPage() {
       <Loader className="animate-spin text-blue-400" size={32} />
       <p className="text-gray-400">Signing you in with Google...</p>
     </div>
+  );
+}
+
+export default function AuthCallbackPage() {
+  return (
+    <Suspense fallback={<div className="flex justify-center pt-40"><Loader className="animate-spin text-blue-400" size={32} /></div>}>
+      <CallbackHandler />
+    </Suspense>
   );
 }
