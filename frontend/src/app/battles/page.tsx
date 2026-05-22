@@ -94,7 +94,7 @@ export default function BattlesPage() {
         setEnrollment(p => ({ ...p, enrolled: false, totalEnrolled: p.totalEnrolled - 1 }));
       } else {
         const res = await api.post('/battles/enroll');
-        setEnrollment({ enrolled: true, totalEnrolled: res.data.totalEnrolled, status: 'enrolled' });
+        setEnrollment({ enrolled: true, totalEnrolled: res.data.totalEnrolled, status: 'enrolled', loaded: true });
       }
     } catch (err: any) {
       const msg = err.response?.data?.error || 'Failed';
