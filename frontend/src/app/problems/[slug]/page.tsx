@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
-import { Play, Clock, Cpu, CheckCircle, XCircle, Loader, Lightbulb, Lock } from 'lucide-react';
+import { Play, Clock, Cpu, CheckCircle, XCircle, Loader, Lightbulb, Lock, ChevronRight } from 'lucide-react';
 import { problemsApi, submissionsApi, hintsApi } from '@/lib/api';
 import { connectSocket } from '@/lib/socket';
 import { useAuthStore } from '@/lib/store';
@@ -13,13 +13,13 @@ const LANGUAGES = [
   { value: 'python', label: 'Python 3.11' },
   { value: 'javascript', label: 'JavaScript (Node 20)' },
   { value: 'java', label: 'Java 17' },
-  { value: 'cpp', label: 'C++17' },
+  { value: 'cpp', label: 'C++ 17' },
   { value: 'c', label: 'C' },
 ];
 
 const STARTERS: Record<string, string> = {
-  python: '# Write your solution here\n\nimport sys\ninput = sys.stdin.readline\n\n',
-  javascript: '// Write your solution here\nconst lines = require("fs").readFileSync("/dev/stdin","utf8").trim().split("\\n");\n\n',
+  python: 'import sys\ninput = sys.stdin.readline\n\n# Write your solution here\n\n',
+  javascript: 'const lines = require("fs").readFileSync("/dev/stdin","utf8").trim().split("\\n");\n\n// Write your solution here\n\n',
   java: 'import java.util.Scanner;\n\npublic class Main {\n    public static void main(String[] args) {\n        Scanner sc = new Scanner(System.in);\n        // Your solution here\n    }\n}',
   cpp: '#include <bits/stdc++.h>\nusing namespace std;\n\nint main() {\n    ios_base::sync_with_stdio(false);\n    cin.tie(NULL);\n    // Your solution here\n    return 0;\n}',
   c: '#include <stdio.h>\n\nint main() {\n    // Your solution here\n    return 0;\n}',
@@ -32,10 +32,49 @@ const statusColor: Record<string, string> = {
 };
 
 const diffColor: Record<string, string> = {
-  Easy: 'text-green-400', Medium: 'text-yellow-400', Hard: 'text-red-400',
+  Easy: 'text-green-400 bg-green-400/10',
+  Medium: 'text-yellow-400 bg-yellow-400/10',
+  Hard: 'text-red-400 bg-red-400/10',
 };
 
 interface Hint { text: string; number: number; }
+
+// Parse description into structured sections
+function parseDescription(desc: string) {
+  if (!desc) return { main: '', examples: [], constraints: '' };
+  const lines = desc.split('\n');
+  const examples: { input: string; output: string; explanation?: string }[] = [];
+  let main = '';
+  let constraints = '';
+  let inExample = false;
+  let inConstraints = false;
+  let currentExample: any = {};
+  let exampleLines: string[] = [];
+
+  for (const line of lines) {
+    if (line.match(/^Example\s*\d*:/i)) {
+      if (currentExample.input !== undefined) examples.push({ ...currentExample });
+      currentExample = {}; inExample = true; exampleLines = [];
+    } else if (line.match(/^Constraints?:/i)) {
+      if (currentExample.input !== undefined) { examples.push({ ...currentExample }); currentExample = {}; }
+      inExample = false; inConstraints = true;
+    } else if (inExample) {
+      if (line.match(/^Input:/i)) currentExample.input = line.replace(/^Input:/i, '').trim();
+      else if (line.match(/^Output:/i)) currentExample.output = line.replace(/^Output:/i, '').trim();
+      else if (line.match(/^Explanation:/i)) currentExample.explanation = line.replace(/^Explanation:/i, '').trim();
+      else if (currentExample.input === undefined) main += line + '\n';
+      else if (currentExample.output === undefined && currentExample.input !== undefined) currentExample.input += '\n' + line;
+      else if (currentExample.output !== undefined) currentExample.output += '\n' + line;
+    } else if (inConstraints) {
+      constraints += line + '\n';
+    } else {
+      if (!line.match(/^Example\s*\d*:/i)) main += line + '\n';
+    }
+  }
+  if (currentExample.input !== undefined) examples.push(currentExample);
+
+  return { main: main.trim(), examples, constraints: constraints.trim() };
+}
 
 export default function ProblemPage() {
   const { slug } = useParams<{ slug: string }>();
@@ -105,69 +144,122 @@ export default function ProblemPage() {
     </div>
   );
 
+  const parsed = parseDescription(problem.description);
+
   return (
-    <div className="flex h-screen pt-16 overflow-hidden">
+    <div className="flex h-screen pt-16 overflow-hidden bg-gray-950">
       {/* Left Panel */}
-      <div className="w-1/2 flex flex-col border-r border-gray-800 overflow-y-auto">
-        <div className="p-6 border-b border-gray-800">
-          <div className="flex items-center gap-3 mb-2">
-            <h1 className="text-xl font-bold">{problem.title}</h1>
-            <span className={`text-sm font-medium ${diffColor[problem.difficulty] || ''}`}>{problem.difficulty}</span>
+      <div className="w-[45%] flex flex-col border-r border-gray-800 overflow-hidden">
+        {/* Header */}
+        <div className="px-6 py-5 border-b border-gray-800 bg-gray-900/40">
+          <div className="flex items-center gap-3 mb-3">
+            <h1 className="text-xl font-bold text-white">{problem.title}</h1>
+            <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${diffColor[problem.difficulty] || ''}`}>
+              {problem.difficulty}
+            </span>
           </div>
-          <div className="flex gap-4 text-sm text-gray-400 mb-3">
-            <span className="flex items-center gap-1"><Clock size={14} />{problem.time_limit}ms</span>
-            <span className="flex items-center gap-1"><Cpu size={14} />{problem.memory_limit}MB</span>
+          <div className="flex items-center gap-4 text-xs text-gray-400 mb-3">
+            <span className="flex items-center gap-1.5"><Clock size={13} /> {problem.time_limit}ms</span>
+            <span className="flex items-center gap-1.5"><Cpu size={13} /> {problem.memory_limit}MB</span>
+            {problem.accepted_count > 0 && (
+              <span className="flex items-center gap-1.5">
+                <CheckCircle size={13} className="text-green-400" />
+                {problem.submission_count > 0 ? `${Math.round((problem.accepted_count / problem.submission_count) * 100)}% accepted` : ''}
+              </span>
+            )}
           </div>
           <div className="flex gap-1.5 flex-wrap">
             {problem.tags?.map((t: string) => (
-              <span key={t} className="px-2 py-0.5 bg-gray-800 rounded text-xs text-gray-400">{t}</span>
+              <span key={t} className="px-2.5 py-0.5 bg-gray-800 rounded-full text-xs text-gray-400 border border-gray-700">{t}</span>
             ))}
           </div>
         </div>
 
         {/* Tabs */}
-        <div className="flex border-b border-gray-800">
+        <div className="flex border-b border-gray-800 bg-gray-900/20">
           {(['description', 'hints'] as const).map(tab => (
             <button key={tab} onClick={() => setActiveTab(tab)}
-              className={`px-6 py-3 text-sm font-medium capitalize transition-colors flex items-center gap-1.5 ${activeTab === tab ? 'border-b-2 border-blue-400 text-white' : 'text-gray-400 hover:text-white'}`}>
-              {tab === 'hints' && <Lightbulb size={14} />}{tab}
+              className={`px-5 py-3 text-sm font-medium capitalize flex items-center gap-1.5 transition-all ${activeTab === tab ? 'border-b-2 border-blue-400 text-white bg-gray-900/40' : 'text-gray-400 hover:text-gray-200'}`}>
+              {tab === 'hints' && <Lightbulb size={14} />}
+              {tab}
               {tab === 'hints' && hintsUsed > 0 && (
-                <span className="ml-1 bg-yellow-500/20 text-yellow-400 text-xs px-1.5 py-0.5 rounded-full">{hintsUsed}/3</span>
+                <span className="ml-0.5 bg-yellow-500/20 text-yellow-400 text-xs px-1.5 py-0.5 rounded-full">{hintsUsed}/3</span>
               )}
             </button>
           ))}
         </div>
 
-        <div className="p-6 flex-1 overflow-y-auto">
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto">
           {activeTab === 'description' ? (
-            <div className="whitespace-pre-wrap text-gray-300 leading-relaxed text-sm">{problem.description}</div>
+            <div className="p-6 space-y-6">
+              {/* Main description */}
+              <div className="text-gray-200 text-[15px] leading-7 whitespace-pre-wrap">{parsed.main}</div>
+
+              {/* Examples */}
+              {parsed.examples.length > 0 && (
+                <div className="space-y-4">
+                  {parsed.examples.map((ex, i) => (
+                    <div key={i} className="rounded-xl border border-gray-700 overflow-hidden">
+                      <div className="bg-gray-800/60 px-4 py-2 text-xs font-semibold text-gray-300 uppercase tracking-wider">
+                        Example {i + 1}
+                      </div>
+                      <div className="p-4 space-y-3">
+                        <div>
+                          <span className="text-xs text-gray-500 uppercase tracking-wider">Input</span>
+                          <pre className="mt-1.5 bg-gray-900 border border-gray-700 rounded-lg px-4 py-2.5 text-sm text-green-300 font-mono overflow-x-auto">{ex.input}</pre>
+                        </div>
+                        <div>
+                          <span className="text-xs text-gray-500 uppercase tracking-wider">Output</span>
+                          <pre className="mt-1.5 bg-gray-900 border border-gray-700 rounded-lg px-4 py-2.5 text-sm text-blue-300 font-mono overflow-x-auto">{ex.output}</pre>
+                        </div>
+                        {ex.explanation && (
+                          <div className="text-sm text-gray-400 bg-gray-800/40 rounded-lg px-4 py-2.5 border border-gray-700/50">
+                            <span className="font-medium text-gray-300">Explanation: </span>{ex.explanation}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Constraints */}
+              {parsed.constraints && (
+                <div className="rounded-xl border border-gray-700 overflow-hidden">
+                  <div className="bg-gray-800/60 px-4 py-2 text-xs font-semibold text-gray-300 uppercase tracking-wider">Constraints</div>
+                  <div className="p-4">
+                    {parsed.constraints.split('\n').filter(Boolean).map((c, i) => (
+                      <div key={i} className="flex items-start gap-2 text-sm text-gray-300 py-0.5">
+                        <ChevronRight size={14} className="text-blue-400 mt-0.5 flex-shrink-0" />
+                        <code className="font-mono text-blue-200">{c.replace(/^[-•]\s*/, '')}</code>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
           ) : (
-            <div className="space-y-4">
+            <div className="p-6 space-y-4">
               <div className="flex items-center justify-between mb-2">
-                <p className="text-sm text-gray-400">Get up to 3 progressive hints. No full code — only logic guidance.</p>
+                <p className="text-sm text-gray-400">Progressive hints — no code, logic only.</p>
                 <span className="text-xs text-gray-500">{3 - hintsUsed} remaining</span>
               </div>
-
               {hints.map((h) => (
-                <div key={h.number} className="glass rounded-xl p-4 border-l-4 border-yellow-500/50">
+                <div key={h.number} className="rounded-xl p-4 border-l-4 border-yellow-500/60 bg-yellow-500/5 border border-yellow-500/20">
                   <div className="flex items-center gap-2 mb-2">
-                    <Lightbulb size={16} className="text-yellow-400" />
+                    <Lightbulb size={15} className="text-yellow-400" />
                     <span className="text-sm font-semibold text-yellow-400">Hint {h.number}</span>
                   </div>
-                  <p className="text-gray-300 text-sm leading-relaxed">{h.text}</p>
+                  <p className="text-gray-200 text-sm leading-relaxed">{h.text}</p>
                 </div>
               ))}
-
-              {/* Locked hints */}
               {Array.from({ length: 3 - hintsUsed }).map((_, i) => (
-                <div key={i} className="glass rounded-xl p-4 opacity-40 border-l-4 border-gray-700">
-                  <div className="flex items-center gap-2">
-                    <Lock size={16} className="text-gray-500" />
-                    <span className="text-sm text-gray-500">Hint {hintsUsed + i + 1} — locked</span>
-                  </div>
+                <div key={i} className="rounded-xl p-4 opacity-30 border border-gray-700 flex items-center gap-2">
+                  <Lock size={14} className="text-gray-500" />
+                  <span className="text-sm text-gray-500">Hint {hintsUsed + i + 1} — locked</span>
                 </div>
               ))}
-
               {hintError && <p className="text-red-400 text-sm">{hintError}</p>}
             </div>
           )}
@@ -175,49 +267,66 @@ export default function ProblemPage() {
       </div>
 
       {/* Right Panel */}
-      <div className="w-1/2 flex flex-col">
-        <div className="flex items-center justify-between px-4 py-2 border-b border-gray-800 bg-gray-900/50">
+      <div className="flex-1 flex flex-col">
+        {/* Toolbar */}
+        <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-800 bg-gray-900/50">
           <select value={language} onChange={e => setLanguage(e.target.value)}
-            className="bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-blue-500">
+            className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-blue-500 text-gray-200">
             {LANGUAGES.map(l => <option key={l.value} value={l.value}>{l.label}</option>)}
           </select>
           <div className="flex gap-2">
             <button onClick={handleGetHint} disabled={loadingHint || hintsUsed >= 3}
               className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-400 border border-yellow-500/20 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
               {loadingHint ? <Loader size={14} className="animate-spin" /> : <Lightbulb size={14} />}
-              {hintsUsed >= 3 ? 'No hints left' : `Hint (${3 - hintsUsed} left)`}
+              {hintsUsed >= 3 ? 'No hints' : `Hint (${3 - hintsUsed})`}
             </button>
-            <button onClick={handleSubmit} disabled={submitting} className="btn-primary flex items-center gap-2 text-sm">
-              {submitting ? <Loader size={16} className="animate-spin" /> : <Play size={16} />}
+            <button onClick={handleSubmit} disabled={submitting}
+              className="btn-primary flex items-center gap-2 text-sm">
+              {submitting ? <Loader size={15} className="animate-spin" /> : <Play size={15} />}
               {submitting ? 'Running...' : 'Submit'}
             </button>
           </div>
         </div>
 
-        <div className="flex-1">
+        {/* Editor */}
+        <div className="flex-1 overflow-hidden">
           <MonacoEditor
             height="100%"
-            language={language === 'cpp' || language === 'c' ? language : language === 'javascript' ? 'javascript' : language}
+            language={language === 'cpp' || language === 'c' ? language : language}
             value={code}
             onChange={v => setCode(v || '')}
             theme="vs-dark"
-            options={{ fontSize: 14, minimap: { enabled: false }, scrollBeyondLastLine: false, padding: { top: 12 } }}
+            options={{
+              fontSize: 14,
+              fontFamily: '"JetBrains Mono", "Fira Code", Consolas, monospace',
+              minimap: { enabled: false },
+              scrollBeyondLastLine: false,
+              padding: { top: 16, bottom: 16 },
+              lineNumbers: 'on',
+              renderLineHighlight: 'all',
+              cursorBlinking: 'smooth',
+            }}
           />
         </div>
 
+        {/* Results */}
         {result && (
-          <div className="border-t border-gray-800 p-4 bg-gray-900/50 max-h-52 overflow-y-auto">
-            <div className={`flex items-center gap-2 font-semibold mb-2 ${statusColor[result.status] || 'text-white'}`}>
+          <div className="border-t border-gray-800 bg-gray-900/60 max-h-52 overflow-y-auto">
+            <div className={`flex items-center gap-2.5 px-4 py-3 font-semibold border-b border-gray-800 ${statusColor[result.status] || 'text-white'}`}>
               {result.status === 'Accepted' ? <CheckCircle size={18} /> : <XCircle size={18} />}
               {result.status}
-              {result.runtime && <span className="text-gray-400 font-normal text-sm">· {result.runtime}ms</span>}
+              {result.runtime && <span className="text-gray-400 font-normal text-sm ml-1">· {result.runtime}ms</span>}
+              {result.status === 'Accepted' && <span className="ml-auto text-sm bg-green-500/10 text-green-400 px-3 py-0.5 rounded-full">All tests passed ✓</span>}
             </div>
-            {result.testResults?.map((tr: any, i: number) => (
-              <div key={i} className={`text-xs px-2 py-1 rounded mb-1 flex items-center gap-2 ${tr.passed ? 'bg-green-900/30 text-green-300' : 'bg-red-900/30 text-red-300'}`}>
-                {tr.passed ? <CheckCircle size={12} /> : <XCircle size={12} />}
-                Test {tr.testCase}: {tr.passed ? 'Passed' : tr.status}{tr.runtime ? ` · ${tr.runtime}ms` : ''}
-              </div>
-            ))}
+            <div className="p-3 grid grid-cols-2 gap-2">
+              {result.testResults?.map((tr: any, i: number) => (
+                <div key={i} className={`text-xs px-3 py-2 rounded-lg flex items-center gap-2 ${tr.passed ? 'bg-green-900/20 text-green-300 border border-green-800/40' : 'bg-red-900/20 text-red-300 border border-red-800/40'}`}>
+                  {tr.passed ? <CheckCircle size={12} /> : <XCircle size={12} />}
+                  <span>Test {tr.testCase}: {tr.passed ? 'Passed' : tr.status}</span>
+                  {tr.runtime && <span className="ml-auto text-gray-400">{tr.runtime}ms</span>}
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </div>
