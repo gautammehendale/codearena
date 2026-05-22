@@ -45,6 +45,8 @@ export default function BattleArenaPage() {
   const [elapsed, setElapsed] = useState(0);
   const [quitModal, setQuitModal] = useState(false);
   const [practiceMode, setPracticeMode] = useState(false);
+  const [tieWindow, setTieWindow] = useState<{ winnerId: string; timeLeft: number } | null>(null);
+  const [tieCountdown, setTieCountdown] = useState(0);
   const chatRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -83,7 +85,15 @@ export default function BattleArenaPage() {
       setResult(data); setSubmitting(false);
     });
 
-    socket.on('battle_end', (data: any) => setWinner(data.winnerId));
+    socket.on('battle_end', (data: any) => { setWinner(data.winnerId); setTieWindow(null); });
+    socket.on('battle_tie', () => { setWinner('draw'); setTieWindow(null); });
+    socket.on('battle_tie_window', (data: any) => {
+      setTieWindow(data);
+      setTieCountdown(data.timeLeft);
+      const interval = setInterval(() => {
+        setTieCountdown(p => { if (p <= 1) { clearInterval(interval); return 0; } return p - 1; });
+      }, 1000);
+    });
     socket.on('new_message', (msg: ChatMessage) => {
       setChat(prev => [...prev, msg]);
       setTimeout(() => chatRef.current?.scrollTo({ top: 9999, behavior: 'smooth' }), 50);
@@ -192,11 +202,22 @@ export default function BattleArenaPage() {
         </div>
       </div>
 
-      {/* Winner Banner */}
+      {/* Tie Window Banner */}
+      {tieWindow && !winner && (
+        <div className={`px-6 py-3 text-center font-semibold text-sm ${tieWindow.winnerId === user?.id ? 'bg-green-900/40 text-green-400' : 'bg-yellow-900/40 text-yellow-400'}`}>
+          {tieWindow.winnerId === user?.id
+            ? `🎉 You solved it! Waiting ${tieCountdown}s for opponent to tie...`
+            : `⚡ Opponent solved it! You have ${tieCountdown}s to tie — submit now!`}
+        </div>
+      )}
+
+      {/* Winner / Draw Banner */}
       {winner && (
-        <div className={`px-6 py-4 text-center font-bold text-lg ${winner === user?.id ? 'bg-green-900/40 text-green-400' : 'bg-red-900/40 text-red-400'}`}>
+        <div className={`px-6 py-4 text-center font-bold text-lg ${winner === 'draw' ? 'bg-yellow-900/40 text-yellow-400' : winner === user?.id ? 'bg-green-900/40 text-green-400' : 'bg-red-900/40 text-red-400'}`}>
           <Trophy size={20} className="inline mr-2" />
-          {winner === user?.id ? '🎉 You Won! +50 points' : `${battle.opponentName} won this round. Better luck next time!`}
+          {winner === 'draw' ? '🤝 Draw! Both solved within 15 seconds. +25 points each' :
+           winner === user?.id ? '🎉 You Won! +50 points' :
+           `${battle.opponentName} won this round. Better luck next time!`}
         </div>
       )}
 

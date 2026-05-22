@@ -33,31 +33,30 @@ function RunResultPanel({ result, onClose }: { result: any; onClose: () => void 
               {tr.runtime && <span className="text-gray-500 text-xs ml-1">{tr.runtime}ms</span>}
               <span className="ml-auto text-gray-600">{expanded === i ? <ChevronUp size={14} /> : <ChevronDown size={14} />}</span>
             </button>
-            {expanded === i && !tr.passed && (
+            {expanded === i && (
               <div className="px-4 pb-3 space-y-2 bg-gray-900/20">
-                {tr.output !== undefined && (
+                {tr.input !== undefined && tr.input !== '' && (
                   <div>
-                    <p className="text-xs text-gray-500 mb-1">Your Output</p>
-                    <pre className="bg-gray-900 border border-red-800/30 rounded px-3 py-2 text-xs text-red-300 font-mono overflow-x-auto">{tr.output || '(empty)'}</pre>
+                    <p className="text-xs text-gray-500 mb-1 uppercase tracking-wider">Input</p>
+                    <pre className="bg-gray-900 border border-gray-700 rounded px-3 py-2 text-xs text-gray-300 font-mono overflow-x-auto whitespace-pre-wrap">{tr.input}</pre>
                   </div>
                 )}
-                {tr.expected !== undefined && (
+                <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <p className="text-xs text-gray-500 mb-1">Expected</p>
-                    <pre className="bg-gray-900 border border-green-800/30 rounded px-3 py-2 text-xs text-green-300 font-mono overflow-x-auto">{tr.expected}</pre>
+                    <p className="text-xs text-gray-500 mb-1 uppercase tracking-wider">Your Output</p>
+                    <pre className={`bg-gray-900 border rounded px-3 py-2 text-xs font-mono overflow-x-auto ${tr.passed ? 'border-green-800/40 text-green-300' : 'border-red-800/40 text-red-300'}`}>{tr.output || '(empty)'}</pre>
                   </div>
-                )}
+                  <div>
+                    <p className="text-xs text-gray-500 mb-1 uppercase tracking-wider">Expected</p>
+                    <pre className="bg-gray-900 border border-green-800/40 rounded px-3 py-2 text-xs text-green-300 font-mono overflow-x-auto">{tr.expected}</pre>
+                  </div>
+                </div>
                 {tr.error && (
                   <div>
-                    <p className="text-xs text-gray-500 mb-1">Error</p>
+                    <p className="text-xs text-gray-500 mb-1 uppercase tracking-wider">Error</p>
                     <pre className="bg-gray-900 border border-yellow-800/30 rounded px-3 py-2 text-xs text-yellow-300 font-mono overflow-x-auto">{tr.error}</pre>
                   </div>
                 )}
-              </div>
-            )}
-            {expanded === i && tr.passed && (
-              <div className="px-4 pb-3 bg-gray-900/20">
-                <pre className="bg-gray-900 border border-green-800/30 rounded px-3 py-2 text-xs text-green-300 font-mono overflow-x-auto">{tr.output}</pre>
               </div>
             )}
           </div>

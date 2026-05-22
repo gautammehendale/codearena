@@ -39,8 +39,10 @@ async function runMatchmaking(io, battleTime) {
     const users = enrolled.rows.map(r => r.user_id);
     if (users.length === 0) { logger.info('No enrollments for this slot'); return; }
 
+    // Always pair real users first — only use bot if truly odd number left
     const pairs = [];
     for (let i = 0; i < users.length - 1; i += 2) pairs.push([users[i], users[i + 1]]);
+    // Only add bot match if odd AND more than 1 user enrolled (solo gets bot, 2+ always paired)
     if (users.length % 2 === 1) pairs.push([users[users.length - 1], null]);
 
     for (const [p1, p2] of pairs) {
@@ -122,6 +124,9 @@ async function endBattle(io, battleId, winnerId) {
     await pool.query('UPDATE users SET battle_wins=battle_wins+1, points=points+50 WHERE id=$1', [winnerId]);
     const loserId = b.player1_id === winnerId ? b.player2_id : b.player1_id;
     if (loserId && !b.is_bot) await pool.query('UPDATE users SET battle_losses=battle_losses+1 WHERE id=$1', [loserId]);
+  } else if (!b.is_bot && b.player2_id) {
+    // Draw — both get 25 points, no win/loss recorded
+    await pool.query('UPDATE users SET points=points+25 WHERE id=$1 OR id=$2', [b.player1_id, b.player2_id]);
   }
   io?.to(`battle:${battleId}`).emit('battle_end', { battleId, winnerId });
   io?.to(`user:${b.player1_id}`).emit('battle_end', { battleId, winnerId, won: b.player1_id === winnerId });

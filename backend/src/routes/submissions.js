@@ -29,7 +29,9 @@ router.post('/run', authenticate, [
     const allPassed = results.every(r => r.passed);
     const status = allPassed ? 'Accepted' : results.find(r => !r.passed)?.status || 'Wrong Answer';
 
-    res.json({ status, testResults: results, sampleOnly: true });
+    // Include the input for each test case in the response
+    const enriched = results.map((r, i) => ({ ...r, input: sampleCases[i]?.input || '' }));
+    res.json({ status, testResults: enriched, sampleOnly: true });
   } catch (err) {
     res.status(500).json({ error: 'Execution failed: ' + err.message });
   }

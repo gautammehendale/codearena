@@ -71,7 +71,10 @@ router.post('/enroll', authenticate, async (req, res) => {
       `SELECT COUNT(*) FROM battle_enrollments WHERE scheduled_battle_time=$1 AND status='enrolled'`,
       [nextBattle.toISOString()]
     );
-    res.json({ enrolled: true, totalEnrolled: parseInt(count.rows[0].count), nextBattleTime: nextBattle.toISOString() });
+    const totalEnrolled = parseInt(count.rows[0].count);
+    const io = req.app.get('io');
+    io?.to('battles').emit('enrollment_update', { totalEnrolled, battleTime: nextBattle.toISOString() });
+    res.json({ enrolled: true, totalEnrolled, nextBattleTime: nextBattle.toISOString() });
   } catch (err) {
     logger.error('Enroll error:', err);
     res.status(500).json({ error: 'Failed to enroll' });

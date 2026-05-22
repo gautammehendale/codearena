@@ -58,14 +58,30 @@ export default function BattlesPage() {
 
   useEffect(() => {
     fetchAll();
+    const interval = setInterval(fetchAll, 5000); // refresh every 5s for live count
     const socket = connectSocket(user?.id);
     socket.emit('join_battles');
     socket.on('matchmaking_complete', fetchAll);
+    socket.on('enrollment_update', fetchAll);
+    socket.on('battle_matched', (data: any) => {
+      fetchAll();
+      if (data.battleId) router.push(`/battles/${data.battleId}`);
+    });
     socket.on('battle_lobby_open', (data: any) => {
       fetchAll();
       if (data.battleId) router.push(`/battles/${data.battleId}`);
     });
-    return () => { socket.off('matchmaking_complete'); socket.off('battle_lobby_open'); };
+    socket.on('battle_start', (data: any) => {
+      if (data.battleId) router.push(`/battles/${data.battleId}`);
+    });
+    return () => {
+      clearInterval(interval);
+      socket.off('matchmaking_complete');
+      socket.off('enrollment_update');
+      socket.off('battle_matched');
+      socket.off('battle_lobby_open');
+      socket.off('battle_start');
+    };
   }, [user]);
 
   const handleEnroll = async () => {

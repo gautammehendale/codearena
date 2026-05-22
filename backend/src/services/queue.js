@@ -128,9 +128,29 @@ async function initQueue(io) {
           const opponentId = battle.player1_id === userId ? battle.player2_id : battle.player1_id;
           io.to(`battle:${battle.id}`).emit('battle_progress', { userId, testsPassed: results.length, totalTests: results.length, solved: true });
 
-          // End battle — this user wins
-          const { endBattle } = require('./battleScheduler');
-          await endBattle(io, battle.id, userId);
+          // 15-second tie window — notify opponent, give them a chance to tie
+          io.to(`battle:${battle.id}`).emit('battle_tie_window', { winnerId: userId, timeLeft: 15 });
+          io.to(`user:${opponentId}`).emit('battle_tie_window', { winnerId: userId, timeLeft: 15 });
+          logger.info(`Battle ${battle.id}: ${userId} solved. 15s tie window started.`);
+
+          // After 15 seconds, check if opponent also solved — if yes: draw, else: winner wins
+          setTimeout(async () => {
+            const opponentProgress = await pool.query(
+              `SELECT solved FROM battle_progress WHERE battle_id=$1 AND user_id=$2`,
+              [battle.id, opponentId]
+            );
+            const opponentSolved = opponentProgress.rows[0]?.solved;
+            const { endBattle } = require('./battleScheduler');
+            if (opponentSolved && !battle.is_bot) {
+              // DRAW — both solved within 15 seconds
+              await endBattle(io, battle.id, null); // null = draw
+              io.to(`battle:${battle.id}`).emit('battle_tie', { battleId: battle.id });
+              logger.info(`Battle ${battle.id}: DRAW! Both solved.`);
+            } else {
+              // Winner wins
+              await endBattle(io, battle.id, userId);
+            }
+          }, 15000);
         }
       }
 
