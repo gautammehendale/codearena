@@ -72,19 +72,38 @@ export default function BattleArenaPage() {
   const [tieCountdown, setTieCountdown] = useState(0);
   const chatRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (!user) { router.push('/login'); return; }
-    api.get('/battles/active').then(r => {
+  const loadBattleAndProblem = async () => {
+    try {
+      const r = await api.get('/battles/active');
       if (r.data.battle) {
         const b = r.data.battle;
         setBattle(b);
         setMyProgress(b.myProgress || { testsPassed: 0, totalTests: 0, solved: false });
         setOppProgress(b.opponentProgress || { testsPassed: 0, totalTests: 0, solved: false });
-        if (b.problem_id) {
-          api.get(`/problems/${b.problem_slug || b.problem_id}`).then(pr => setProblem(pr.data)).catch(() => {});
+        if (b.problem_slug) {
+          const pr = await api.get(`/problems/${b.problem_slug}`);
+          setProblem(pr.data);
+        } else if (b.problem_id) {
+          const pr = await api.get(`/problems/${b.problem_id}`);
+          setProblem(pr.data);
         }
       }
-    });
+    } catch (err) { console.error('Battle load error:', err); }
+  };
+
+  useEffect(() => {
+    if (!user) { router.push('/login'); return; }
+    loadBattleAndProblem();
+    const retryInterval = setInterval(() => {
+      // Retry loading problem if not loaded yet (battle might start after page load)
+      if (!problem) loadBattleAndProblem();
+    }, 3000);
+    return () => clearInterval(retryInterval);
+    // eslint-disable-next-line
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
     api.get(`/chat/battle-${id}`).then(r => setChat(r.data)).catch(() => {});
   }, [id, user]);
 

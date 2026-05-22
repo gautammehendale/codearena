@@ -58,11 +58,13 @@ export default function BattlesPage() {
 
   useEffect(() => {
     fetchAll();
-    const interval = setInterval(fetchAll, 5000); // refresh every 5s for live count
+    // NO polling — rely on socket events only to avoid hammering Render free tier
     const socket = connectSocket(user?.id);
     socket.emit('join_battles');
     socket.on('matchmaking_complete', fetchAll);
-    socket.on('enrollment_update', fetchAll);
+    socket.on('enrollment_update', (data: any) => {
+      setEnrollment(p => ({ ...p, totalEnrolled: data.totalEnrolled }));
+    });
     socket.on('battle_matched', (data: any) => {
       fetchAll();
       if (data.battleId) router.push(`/battles/${data.battleId}`);
@@ -75,7 +77,6 @@ export default function BattlesPage() {
       if (data.battleId) router.push(`/battles/${data.battleId}`);
     });
     return () => {
-      clearInterval(interval);
       socket.off('matchmaking_complete');
       socket.off('enrollment_update');
       socket.off('battle_matched');
