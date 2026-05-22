@@ -1,8 +1,18 @@
 const Bull = require('bull');
 const { runCode } = require('./judge');
+const { runWithJudge0, isAvailable: judge0Available } = require('./judge0');
 const { pool } = require('../models/db');
 const { updateLeaderboard, cacheDel } = require('./redis');
 const logger = require('../utils/logger');
+
+async function executeCode(code, language, testCases, timeLimit, memoryLimit) {
+  if (judge0Available()) {
+    logger.info('Using Judge0 API for execution');
+    return runWithJudge0(code, language, testCases, timeLimit, memoryLimit);
+  }
+  logger.info('Using Docker sandbox for execution');
+  return runCode(code, language, testCases, timeLimit, memoryLimit);
+}
 
 let submissionQueue;
 
@@ -16,7 +26,7 @@ async function initQueue(io) {
     logger.info(`Processing submission ${submissionId}`);
 
     try {
-      const results = await runCode(code, language, testCases, timeLimit, memoryLimit);
+      const results = await executeCode(code, language, testCases, timeLimit, memoryLimit);
       const allPassed = results.every(r => r.passed);
       const status = allPassed ? 'Accepted' : results.find(r => r.status !== 'passed')?.status || 'Wrong Answer';
       const runtime = Math.max(...results.map(r => r.runtime || 0));
