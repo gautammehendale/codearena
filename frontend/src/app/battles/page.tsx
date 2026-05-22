@@ -96,7 +96,10 @@ export default function BattlesPage() {
         setEnrollment({ enrolled: true, totalEnrolled: res.data.totalEnrolled, status: 'enrolled' });
       }
     } catch (err: any) {
-      alert(err.response?.data?.error || 'Failed');
+      const msg = err.response?.data?.error || 'Failed';
+      // Show inline instead of browser alert
+      setEnrollment(p => ({ ...p, _error: msg } as any));
+      setTimeout(() => setEnrollment(p => ({ ...p, _error: undefined } as any)), 4000);
     } finally { setLoading(false); }
   };
 

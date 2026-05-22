@@ -83,15 +83,23 @@ router.post('/enroll', authenticate, async (req, res) => {
 
 router.delete('/enroll', authenticate, async (req, res) => {
   const today = getTodayDate();
-  await pool.query('DELETE FROM battle_enrollments WHERE user_id=$1 AND battle_date=$2', [req.user.id, today]);
+  // Allow withdraw anytime for future battles
+  await pool.query(
+    `DELETE FROM battle_enrollments WHERE user_id=$1 AND battle_date=$2
+     AND scheduled_battle_time >= NOW()`,
+    [req.user.id, today]
+  );
   res.json({ enrolled: false });
 });
 
 router.get('/enrollment', authenticate, async (req, res) => {
   const today = getTodayDate();
   const nextBattle = getNextBattleTime();
+  // Only count enrollment if it's for a FUTURE battle (not a past slot)
   const enroll = await pool.query(
-    'SELECT * FROM battle_enrollments WHERE user_id=$1 AND battle_date=$2', [req.user.id, today]
+    `SELECT * FROM battle_enrollments WHERE user_id=$1 AND battle_date=$2
+     AND scheduled_battle_time >= NOW() - INTERVAL '5 minutes'`,
+    [req.user.id, today]
   );
   const count = await pool.query(
     'SELECT COUNT(*) FROM battle_enrollments WHERE scheduled_battle_time=$1 AND status=$2',

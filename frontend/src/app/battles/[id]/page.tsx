@@ -1,11 +1,32 @@
 'use client';
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { Swords, Play, Loader, CheckCircle, XCircle, Send, Trophy, Clock } from 'lucide-react';
 import api, { submissionsApi } from '@/lib/api';
 import { connectSocket } from '@/lib/socket';
 import { useAuthStore } from '@/lib/store';
+
+// Simple confetti
+function Confetti({ show }: { show: boolean }) {
+  if (!show) return null;
+  const pieces = Array.from({ length: 60 }, (_, i) => ({
+    id: i, x: Math.random() * 100, delay: Math.random() * 2,
+    color: ['#FFD700','#FF6B6B','#4ECDC4','#45B7D1','#96CEB4','#FFEAA7','#DDA0DD'][Math.floor(Math.random() * 7)],
+    size: 8 + Math.random() * 8,
+  }));
+  return (
+    <div className="fixed inset-0 pointer-events-none z-50 overflow-hidden">
+      {pieces.map(p => (
+        <div key={p.id} className="absolute animate-bounce"
+          style={{ left: `${p.x}%`, top: '-20px', width: p.size, height: p.size,
+            backgroundColor: p.color, borderRadius: '2px', transform: `rotate(${Math.random()*360}deg)`,
+            animation: `fall ${1.5 + Math.random()}s ${p.delay}s linear forwards` }} />
+      ))}
+      <style>{`@keyframes fall { to { transform: translateY(110vh) rotate(720deg); opacity: 0; } }`}</style>
+    </div>
+  );
+}
 
 const MonacoEditor = dynamic(() => import('@monaco-editor/react'), { ssr: false });
 
@@ -43,6 +64,8 @@ export default function BattleArenaPage() {
   const [chat, setChat] = useState<ChatMessage[]>([]);
   const [chatMsg, setChatMsg] = useState('');
   const [elapsed, setElapsed] = useState(0);
+  const [running, setRunning] = useState(false);
+  const [runResult, setRunResult] = useState<any>(null);
   const [quitModal, setQuitModal] = useState(false);
   const [practiceMode, setPracticeMode] = useState(false);
   const [tieWindow, setTieWindow] = useState<{ winnerId: string; timeLeft: number } | null>(null);
@@ -107,10 +130,14 @@ export default function BattleArenaPage() {
 
   // Timer
   useEffect(() => {
-    if (!battle?.started_at) return;
-    const t = setInterval(() => setElapsed(Math.floor((Date.now() - new Date(battle.started_at).getTime()) / 1000)), 1000);
+    if (!battle?.started_at || battle?.status !== 'active') return;
+    const startMs = new Date(battle.started_at).getTime();
+    const t = setInterval(() => {
+      const e = Math.floor((Date.now() - startMs) / 1000);
+      setElapsed(Math.max(0, e));
+    }, 1000);
     return () => clearInterval(t);
-  }, [battle?.started_at]);
+  }, [battle?.started_at, battle?.status]);
 
   const fetchBattle = async () => {
     const r = await api.get('/battles/active');
@@ -134,6 +161,16 @@ export default function BattleArenaPage() {
       setSubmitting(false);
       setResult({ status: 'Error' });
     }
+  };
+
+  const handleRun = async () => {
+    if (!problem || !user) return;
+    setRunning(true); setRunResult(null);
+    try {
+      const res = await submissionsApi.run({ problemId: problem.id, language, code });
+      setRunResult(res.data);
+    } catch { setRunResult({ status: 'Error', testResults: [] }); }
+    finally { setRunning(false); }
   };
 
   const handleQuit = async () => {
@@ -211,14 +248,41 @@ export default function BattleArenaPage() {
         </div>
       )}
 
-      {/* Winner / Draw Banner */}
+      {/* Confetti + Winner Screen */}
       {winner && (
-        <div className={`px-6 py-4 text-center font-bold text-lg ${winner === 'draw' ? 'bg-yellow-900/40 text-yellow-400' : winner === user?.id ? 'bg-green-900/40 text-green-400' : 'bg-red-900/40 text-red-400'}`}>
-          <Trophy size={20} className="inline mr-2" />
-          {winner === 'draw' ? '🤝 Draw! Both solved within 15 seconds. +25 points each' :
-           winner === user?.id ? '🎉 You Won! +50 points' :
-           `${battle.opponentName} won this round. Better luck next time!`}
-        </div>
+        <>
+          <Confetti show={winner === user?.id} />
+          <div className={`fixed inset-0 z-40 flex flex-col items-center justify-center ${winner === 'draw' ? 'bg-yellow-950/95' : winner === user?.id ? 'bg-green-950/95' : 'bg-gray-950/95'}`}>
+            <div className="text-center px-8">
+              {winner === user?.id ? (
+                <>
+                  <div className="text-8xl mb-6 animate-bounce">🏆</div>
+                  <h1 className="text-6xl font-black text-green-400 mb-4">YOU WON!</h1>
+                  <p className="text-xl text-green-300 mb-2">+50 points added to your score</p>
+                  <p className="text-gray-400">vs {battle.opponentName}</p>
+                </>
+              ) : winner === 'draw' ? (
+                <>
+                  <div className="text-8xl mb-6">🤝</div>
+                  <h1 className="text-6xl font-black text-yellow-400 mb-4">DRAW!</h1>
+                  <p className="text-xl text-yellow-300 mb-2">Both solved within 15 seconds</p>
+                  <p className="text-gray-400">+25 points each</p>
+                </>
+              ) : (
+                <>
+                  <div className="text-8xl mb-6">💀</div>
+                  <h1 className="text-5xl font-black text-red-400 mb-4">YOU LOST</h1>
+                  <p className="text-xl text-gray-300 mb-2">{battle.opponentName} was faster</p>
+                  <p className="text-gray-400">Better luck next time!</p>
+                </>
+              )}
+              <button onClick={() => router.push('/battles')}
+                className="mt-8 btn-primary text-lg px-10 py-3">
+                Back to Battles
+              </button>
+            </div>
+          </div>
+        </>
       )}
 
       {/* Matched — Waiting for lobby */}
@@ -307,7 +371,12 @@ export default function BattleArenaPage() {
                 className="bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm focus:outline-none">
                 {LANGUAGES.map(l => <option key={l.value} value={l.value}>{l.label}</option>)}
               </select>
-              <button onClick={handleSubmit} disabled={submitting} className="btn-primary flex items-center gap-2 text-sm">
+              <button onClick={handleRun} disabled={running || submitting}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg bg-gray-700 hover:bg-gray-600 text-gray-200 border border-gray-600 transition-colors disabled:opacity-40">
+                {running ? <Loader size={14} className="animate-spin" /> : <Play size={14} />}
+                Run
+              </button>
+              <button onClick={handleSubmit} disabled={submitting || running} className="btn-primary flex items-center gap-2 text-sm">
                 {submitting ? <Loader size={16} className="animate-spin" /> : <Play size={16} />}
                 {submitting ? 'Judging...' : 'Submit'}
               </button>
@@ -316,6 +385,20 @@ export default function BattleArenaPage() {
               <MonacoEditor height="100%" language={language} value={code} onChange={v => setCode(v || '')}
                 theme="vs-dark" options={{ fontSize: 14, minimap: { enabled: false }, padding: { top: 12 } }} />
             </div>
+            {runResult && (
+              <div className="border-t border-gray-800 bg-gray-950 max-h-36 overflow-y-auto">
+                <div className={`flex items-center gap-2 px-3 py-2 text-xs font-semibold border-b border-gray-800 ${runResult.testResults?.every((t:any)=>t.passed) ? 'text-green-400' : 'text-red-400'}`}>
+                  {runResult.testResults?.every((t:any)=>t.passed) ? <CheckCircle size={12}/> : <XCircle size={12}/>}
+                  Sample tests · {runResult.status}
+                </div>
+                {runResult.testResults?.map((tr:any, i:number) => (
+                  <div key={i} className={`px-3 py-1.5 text-xs border-b border-gray-800/50 ${tr.passed?'text-green-300':'text-red-300'}`}>
+                    <span className="font-medium">Case {tr.testCase}: {tr.passed?'✓':'✗'}</span>
+                    {!tr.passed && tr.output !== undefined && <span className="text-gray-400 ml-2">got "{tr.output}" expected "{tr.expected}"</span>}
+                  </div>
+                ))}
+              </div>
+            )}
             {result && (
               <div className="border-t border-gray-800 p-3 bg-gray-900/50">
                 <div className={`flex items-center gap-2 text-sm font-semibold ${result.status === 'Accepted' ? 'text-green-400' : 'text-red-400'}`}>
