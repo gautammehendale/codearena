@@ -4,11 +4,19 @@ const logger = require('../utils/logger');
 let redis;
 
 async function initRedis() {
-  redis = new Redis({
-    host: process.env.REDIS_HOST || 'localhost',
-    port: process.env.REDIS_PORT || 6379,
-    retryStrategy: (times) => Math.min(times * 50, 2000),
-  });
+  const redisUrl = process.env.REDIS_URL;
+  if (redisUrl) {
+    redis = new Redis(redisUrl, {
+      tls: redisUrl.startsWith('rediss://') ? { rejectUnauthorized: false } : undefined,
+      retryStrategy: (times) => Math.min(times * 50, 2000),
+    });
+  } else {
+    redis = new Redis({
+      host: process.env.REDIS_HOST || 'localhost',
+      port: process.env.REDIS_PORT || 6379,
+      retryStrategy: (times) => Math.min(times * 50, 2000),
+    });
+  }
   redis.on('connect', () => logger.info('Redis connected'));
   redis.on('error', (err) => logger.error('Redis error:', err));
   return redis;

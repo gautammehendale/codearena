@@ -17,9 +17,11 @@ async function executeCode(code, language, testCases, timeLimit, memoryLimit) {
 let submissionQueue;
 
 async function initQueue(io) {
-  submissionQueue = new Bull('submissions', {
-    redis: { host: process.env.REDIS_HOST || 'localhost', port: process.env.REDIS_PORT || 6379 }
-  });
+  const redisUrl = process.env.REDIS_URL;
+  submissionQueue = new Bull('submissions', redisUrl
+    ? { url: redisUrl, redis: { tls: redisUrl.startsWith('rediss://') ? { rejectUnauthorized: false } : undefined } }
+    : { redis: { host: process.env.REDIS_HOST || 'localhost', port: process.env.REDIS_PORT || 6379 } }
+  );
 
   submissionQueue.process(3, async (job) => {
     const { submissionId, code, language, testCases, timeLimit, memoryLimit, userId, problemId } = job.data;
