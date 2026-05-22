@@ -1,6 +1,7 @@
 const Bull = require('bull');
 const { runCode } = require('./judge');
 const { runWithJudge0, isAvailable: judge0Available } = require('./judge0');
+const { runWithPiston } = require('./piston');
 const { pool } = require('../models/db');
 const { updateLeaderboard, cacheDel } = require('./redis');
 const logger = require('../utils/logger');
@@ -9,6 +10,10 @@ async function executeCode(code, language, testCases, timeLimit, memoryLimit) {
   if (judge0Available()) {
     logger.info('Using Judge0 API for execution');
     return runWithJudge0(code, language, testCases, timeLimit, memoryLimit);
+  }
+  if (process.env.NODE_ENV === 'production') {
+    logger.info('Using Piston API for execution');
+    return runWithPiston(code, language, testCases, timeLimit);
   }
   logger.info('Using Docker sandbox for execution');
   return runCode(code, language, testCases, timeLimit, memoryLimit);
