@@ -92,7 +92,7 @@ router.get('/user/history', authenticate, async (req, res) => {
   const { page = 1, limit = 20, problemId } = req.query;
   const offset = (page - 1) * limit;
   try {
-    let query = `SELECT s.id, s.language, s.status, s.runtime, s.memory_used, s.created_at, p.title, p.slug
+    let query = `SELECT s.id, s.problem_id, s.language, s.status, s.runtime, s.memory_used, s.created_at, p.title, p.slug
                  FROM submissions s JOIN problems p ON s.problem_id=p.id WHERE s.user_id=$1`;
     const params = [req.user.id];
     if (problemId) { params.push(problemId); query += ` AND s.problem_id=$${params.length}`; }

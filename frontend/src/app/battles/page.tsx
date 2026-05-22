@@ -34,7 +34,7 @@ export default function BattlesPage() {
   const router = useRouter();
   const { user } = useAuthStore();
   const [schedule, setSchedule] = useState<Schedule | null>(null);
-  const [enrollment, setEnrollment] = useState<{ enrolled: boolean; totalEnrolled: number; status: string | null }>({ enrolled: false, totalEnrolled: 0, status: null });
+  const [enrollment, setEnrollment] = useState<{ enrolled: boolean; totalEnrolled: number; status: string | null; loaded: boolean }>({ enrolled: false, totalEnrolled: 0, status: null, loaded: false });
   const [loading, setLoading] = useState(false);
   const [activeBattle, setActiveBattle] = useState<any>(null);
   const [leaderboard, setLeaderboard] = useState<any[]>([]);
@@ -51,7 +51,7 @@ export default function BattlesPage() {
         api.get('/battles/enrollment').then(r => r.data).catch(() => ({ enrolled: false, totalEnrolled: 0, status: null })),
         api.get('/battles/active').then(r => r.data).catch(() => ({ battle: null })),
       ]);
-      setEnrollment(enroll);
+      setEnrollment({ ...enroll, loaded: true });
       if (active.battle) setActiveBattle(active.battle);
     }
   };
@@ -154,7 +154,7 @@ export default function BattlesPage() {
             {schedule.enrollmentOpen && !schedule.isBattleActive && (
               <>
                 <p className="text-xs text-gray-500 mb-1">Enrollment closes in</p>
-                <Countdown target={schedule.enrollmentOpens} />
+                <Countdown target={schedule.matchingTime} />
               </>
             )}
             {!schedule.enrollmentOpen && !schedule.isBattleActive && (
@@ -171,7 +171,9 @@ export default function BattlesPage() {
         <div className="glass rounded-xl p-6 flex flex-col">
           <h2 className="font-semibold mb-2 flex items-center gap-2"><Users size={18} className="text-purple-400" /> Enrollment</h2>
           <div className="flex-1 flex flex-col items-center justify-center text-center py-4">
-            <div className="text-5xl font-bold text-purple-400 mb-1">{enrollment.totalEnrolled}</div>
+            <div className="text-5xl font-bold text-purple-400 mb-1">
+              {enrollment.loaded ? enrollment.totalEnrolled : '—'}
+            </div>
             <div className="text-gray-400 text-sm mb-6">players enrolled today</div>
             {enrollment.totalEnrolled % 2 === 1 && enrollment.totalEnrolled > 0 && (
               <div className="flex items-center gap-2 text-xs text-gray-500 mb-4 bg-gray-800/50 px-3 py-1.5 rounded-full">
