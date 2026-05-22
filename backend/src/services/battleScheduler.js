@@ -129,26 +129,28 @@ async function endBattle(io, battleId, winnerId) {
 }
 
 function setupBattleScheduler(io) {
+  // Battles every 30 mins: at :00 and :30
+  // Matching: :55 and :25 (5 mins before)
+  // Lobby: :58 and :28 (2 mins before)
+  // Start: :00 and :30
   setInterval(async () => {
     const now = new Date();
     const m = now.getMinutes();
-    const nextBattle = getNextBattleTime();
 
-    // :30 = enrollment reminder (30 mins before next battle)
-    if (m === 30) {
-      logger.info(`Enrollment open for battle at ${nextBattle.toISOString()}`);
-      io?.to('battles').emit('enrollment_open', { battleTime: nextBattle.toISOString() });
-    }
-    // :45 = run matchmaking (15 mins before)
-    if (m === 45) await runMatchmaking(io, nextBattle);
-    // :55 = open lobby (5 mins before)
-    if (m === 55) await openLobby(io, nextBattle);
-    // :00 = start battles
-    if (m === 0) await startBattles(io, new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours(), 0, 0, 0));
+    const battleAt00 = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours(), 0, 0, 0);
+    const battleAt30 = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours(), 30, 0, 0);
+    const nextHour00 = new Date(battleAt00.getTime() + 3600000);
+
+    if (m === 25) await runMatchmaking(io, battleAt30);
+    if (m === 28) await openLobby(io, battleAt30);
+    if (m === 30) { await startBattles(io, battleAt30); io?.to('battles').emit('enrollment_open', { battleTime: nextHour00.toISOString() }); }
+    if (m === 55) await runMatchmaking(io, nextHour00);
+    if (m === 58) await openLobby(io, nextHour00);
+    if (m === 0)  { await startBattles(io, battleAt00); io?.to('battles').emit('enrollment_open', { battleTime: battleAt30.toISOString() }); }
 
   }, 60000);
 
-  logger.info('Battle scheduler: hourly battles — enroll@:30, match@:45, lobby@:55, start@:00');
+  logger.info('Battle scheduler: every 30 mins (:00 and :30) — match@:55/:25, lobby@:58/:28, start@:00/:30');
 }
 
 module.exports = { setupBattleScheduler, endBattle, runMatchmaking };

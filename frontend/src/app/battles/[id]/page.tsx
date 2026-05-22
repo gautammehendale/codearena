@@ -200,6 +200,21 @@ export default function BattleArenaPage() {
         </div>
       )}
 
+      {/* Matched — Waiting for lobby */}
+      {battle.status === 'matched' && !winner && (
+        <div className="flex-1 flex items-center justify-center">
+          <div className="glass rounded-2xl p-10 text-center max-w-md w-full mx-6">
+            <div className="text-5xl mb-4 animate-pulse">⚔️</div>
+            <h2 className="text-xl font-bold mb-2">You're Matched!</h2>
+            <p className="text-gray-300 text-sm mb-2">vs <span className="text-purple-400 font-semibold">{battle.opponentName}</span></p>
+            <p className="text-gray-400 text-sm mb-6">Battle starts soon. Lobby opens 2 minutes before start to choose difficulty.</p>
+            <div className="flex items-center justify-center gap-2 text-gray-500 text-sm">
+              <Loader size={16} className="animate-spin" /> Waiting for battle to start...
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Lobby — Difficulty Selection */}
       {battle.status === 'lobby' && !winner && (
         <div className="flex-1 flex items-center justify-center">

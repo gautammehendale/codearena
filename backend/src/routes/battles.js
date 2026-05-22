@@ -6,12 +6,20 @@ const logger = require('../utils/logger');
 const router = express.Router();
 
 function getNextBattleTime() {
+  // Battles every 30 mins: at :00 and :30 of every hour
+  // Enrollment closes 10 mins before (:50 and :20)
+  // Matching 5 mins before (:55 and :25)
   const now = new Date();
   const battle = new Date(now);
-  battle.setMinutes(0, 0, 0);
-  // If we're past :00 (even 1 second), the current hour's battle is either live or past
-  // Next battle is always the upcoming hour
-  if (now.getMinutes() > 0 || now.getSeconds() > 0) {
+  const mins = now.getMinutes();
+  const secs = now.getSeconds();
+
+  if (mins < 30 || (mins === 30 && secs === 0)) {
+    // Next battle is at :30
+    battle.setMinutes(30, 0, 0);
+  } else {
+    // Next battle is at :00 of next hour
+    battle.setMinutes(0, 0, 0);
     battle.setHours(battle.getHours() + 1);
   }
   return battle;
@@ -22,9 +30,9 @@ function getTodayDate() { return new Date().toISOString().split('T')[0]; }
 router.get('/schedule', async (req, res) => {
   const now = new Date();
   const nextBattle = getNextBattleTime();
-  const enrollmentOpens = new Date(nextBattle.getTime() - 30 * 60000);
-  const matchingTime = new Date(nextBattle.getTime() - 15 * 60000);
-  const lobbyTime = new Date(nextBattle.getTime() - 5 * 60000);
+  const enrollmentOpens = new Date(nextBattle.getTime() - 30 * 60000); // 30 mins before
+  const matchingTime = new Date(nextBattle.getTime() - 5 * 60000);    // 5 mins before
+  const lobbyTime = new Date(nextBattle.getTime() - 2 * 60000);       // 2 mins before
 
   res.json({
     nextBattleTime: nextBattle.toISOString(),
@@ -42,14 +50,14 @@ router.post('/enroll', authenticate, async (req, res) => {
   const now = new Date();
   const nextBattle = getNextBattleTime();
   const enrollmentOpens = new Date(nextBattle.getTime() - 30 * 60000);
-  const matchingTime = new Date(nextBattle.getTime() - 15 * 60000);
+  const matchingTime = new Date(nextBattle.getTime() - 5 * 60000);
 
   if (now < enrollmentOpens) {
     const minsUntil = Math.round((enrollmentOpens.getTime() - now.getTime()) / 60000);
     return res.status(400).json({ error: `Enrollment opens in ${minsUntil} minutes` });
   }
   if (now >= matchingTime) {
-    return res.status(400).json({ error: 'Enrollment closed. Next battle in ~45 minutes.' });
+    return res.status(400).json({ error: 'Enrollment closed. Next battle starts soon.' });
   }
 
   try {

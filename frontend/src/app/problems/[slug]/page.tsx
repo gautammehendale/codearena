@@ -2,12 +2,70 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
-import { Play, Clock, Cpu, CheckCircle, XCircle, Loader, Lightbulb, Lock, ChevronRight } from 'lucide-react';
+import { Play, Clock, Cpu, CheckCircle, XCircle, Loader, Lightbulb, Lock, ChevronRight, ChevronDown, ChevronUp, X } from 'lucide-react';
 import { problemsApi, submissionsApi, hintsApi } from '@/lib/api';
 import { connectSocket } from '@/lib/socket';
 import { useAuthStore } from '@/lib/store';
 
 const MonacoEditor = dynamic(() => import('@monaco-editor/react'), { ssr: false });
+
+function RunResultPanel({ result, onClose }: { result: any; onClose: () => void }) {
+  const [expanded, setExpanded] = useState<number | null>(0);
+  const allPassed = result.testResults?.every((t: any) => t.passed);
+
+  return (
+    <div className="border-t border-gray-800 bg-gray-950">
+      <div className={`flex items-center gap-2 px-4 py-2.5 border-b border-gray-800 ${allPassed ? 'bg-green-950/40' : 'bg-red-950/30'}`}>
+        {allPassed ? <CheckCircle size={16} className="text-green-400" /> : <XCircle size={16} className="text-red-400" />}
+        <span className={`text-sm font-semibold ${allPassed ? 'text-green-400' : 'text-red-400'}`}>
+          {allPassed ? 'Sample Tests Passed' : result.status || 'Failed'}
+        </span>
+        <span className="text-xs text-gray-500 ml-1">— 2 sample cases</span>
+        <button onClick={onClose} className="ml-auto text-gray-500 hover:text-white"><X size={14} /></button>
+      </div>
+      <div className="max-h-52 overflow-y-auto">
+        {result.testResults?.map((tr: any, i: number) => (
+          <div key={i} className="border-b border-gray-800/50 last:border-0">
+            <button onClick={() => setExpanded(expanded === i ? null : i)}
+              className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm text-left hover:bg-gray-900/40 transition-colors ${tr.passed ? 'text-green-400' : 'text-red-400'}`}>
+              {tr.passed ? <CheckCircle size={14} /> : <XCircle size={14} />}
+              <span className="font-medium">Case {tr.testCase}: {tr.passed ? 'Passed' : tr.status}</span>
+              {tr.runtime && <span className="text-gray-500 text-xs ml-1">{tr.runtime}ms</span>}
+              <span className="ml-auto text-gray-600">{expanded === i ? <ChevronUp size={14} /> : <ChevronDown size={14} />}</span>
+            </button>
+            {expanded === i && !tr.passed && (
+              <div className="px-4 pb-3 space-y-2 bg-gray-900/20">
+                {tr.output !== undefined && (
+                  <div>
+                    <p className="text-xs text-gray-500 mb-1">Your Output</p>
+                    <pre className="bg-gray-900 border border-red-800/30 rounded px-3 py-2 text-xs text-red-300 font-mono overflow-x-auto">{tr.output || '(empty)'}</pre>
+                  </div>
+                )}
+                {tr.expected !== undefined && (
+                  <div>
+                    <p className="text-xs text-gray-500 mb-1">Expected</p>
+                    <pre className="bg-gray-900 border border-green-800/30 rounded px-3 py-2 text-xs text-green-300 font-mono overflow-x-auto">{tr.expected}</pre>
+                  </div>
+                )}
+                {tr.error && (
+                  <div>
+                    <p className="text-xs text-gray-500 mb-1">Error</p>
+                    <pre className="bg-gray-900 border border-yellow-800/30 rounded px-3 py-2 text-xs text-yellow-300 font-mono overflow-x-auto">{tr.error}</pre>
+                  </div>
+                )}
+              </div>
+            )}
+            {expanded === i && tr.passed && (
+              <div className="px-4 pb-3 bg-gray-900/20">
+                <pre className="bg-gray-900 border border-green-800/30 rounded px-3 py-2 text-xs text-green-300 font-mono overflow-x-auto">{tr.output}</pre>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 const LANGUAGES = [
   { value: 'python', label: 'Python 3.11' },
@@ -327,24 +385,9 @@ export default function ProblemPage() {
           />
         </div>
 
-        {/* Run Results (sample test cases) */}
+        {/* Run Results */}
         {runResult && (
-          <div className="border-t border-gray-800 bg-gray-900/60 max-h-44 overflow-y-auto">
-            <div className={`flex items-center gap-2.5 px-4 py-2.5 text-sm font-semibold border-b border-gray-800 ${runResult.status === 'Accepted' ? 'text-green-400' : 'text-red-400'}`}>
-              {runResult.status === 'Accepted' ? <CheckCircle size={16} /> : <XCircle size={16} />}
-              {runResult.status === 'Accepted' ? 'Sample tests passed' : runResult.status}
-              <span className="ml-auto text-xs font-normal text-gray-500">2 sample test cases</span>
-            </div>
-            <div className="p-3 grid grid-cols-2 gap-2">
-              {runResult.testResults?.map((tr: any, i: number) => (
-                <div key={i} className={`text-xs px-3 py-2 rounded-lg flex items-center gap-2 ${tr.passed ? 'bg-green-900/20 text-green-300 border border-green-800/40' : 'bg-red-900/20 text-red-300 border border-red-800/40'}`}>
-                  {tr.passed ? <CheckCircle size={12} /> : <XCircle size={12} />}
-                  <span>Test {tr.testCase}: {tr.passed ? 'Passed' : tr.status}</span>
-                  {tr.runtime && <span className="ml-auto text-gray-500">{tr.runtime}ms</span>}
-                </div>
-              ))}
-            </div>
-          </div>
+          <RunResultPanel result={runResult} onClose={() => setRunResult(null)} />
         )}
 
         {/* Submit Results (all test cases) */}

@@ -93,7 +93,7 @@ export default function BattlesPage() {
         <h1 className="text-3xl font-bold">1v1 Battles</h1>
         <span className="px-2.5 py-0.5 bg-purple-500/20 text-purple-400 border border-purple-500/30 rounded-full text-xs">Every Hour</span>
       </div>
-      <p className="text-gray-400 mb-8">Battles happen every hour. Enrollment opens 30 mins before. Matching at 15 mins before. Battle starts on the hour.</p>
+      <p className="text-gray-400 mb-8">Battles every 30 mins (:00 and :30). Enroll up to 30 mins before. Matching at 5 mins before. Battle starts on time.</p>
 
       {/* Active Battle Banner */}
       {activeBattle && (
@@ -177,10 +177,10 @@ export default function BattlesPage() {
         <h2 className="font-semibold mb-4">How 1v1 Battles Work</h2>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {[
-            { step: '1', icon: '📋', title: 'Enroll', desc: 'Sign up by 4 PM daily' },
-            { step: '2', icon: '🎯', title: 'Get Matched', desc: 'Auto-paired at 4 PM. Odd player gets a bot' },
-            { step: '3', icon: '⚙️', title: 'Choose Difficulty', desc: '5-min lobby at 5:55 PM — both agree on Easy/Medium/Hard' },
-            { step: '4', icon: '⚔️', title: 'Battle!', desc: 'Same problem, 6 PM start. First to solve wins 50 pts' },
+            { step: '1', icon: '📋', title: 'Enroll', desc: 'Open 30 mins before each battle (:30 and :00)' },
+            { step: '2', icon: '🎯', title: 'Get Matched', desc: '5 mins before start. Odd player gets a bot' },
+            { step: '3', icon: '⚙️', title: 'Choose Difficulty', desc: '2 min lobby — both agree on Easy/Medium/Hard' },
+            { step: '4', icon: '⚔️', title: 'Battle!', desc: 'Every :00 and :30. First to solve wins 50 pts' },
           ].map(s => (
             <div key={s.step} className="text-center">
               <div className="text-3xl mb-2">{s.icon}</div>
