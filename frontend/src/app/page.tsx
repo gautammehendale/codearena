@@ -46,7 +46,7 @@ export default function Home() {
             Code. Compete.<br />Conquer.
           </h1>
           <p className="text-xl text-gray-400 mb-10 max-w-2xl mx-auto">
-            Sharpen your skills with 100+ problems, real-time Docker-judged submissions, 1v1 daily battles, and live leaderboards.
+            Practice curated problems, compete in real-time 1v1 battles, and climb live leaderboards — all in one platform.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             {user ? (

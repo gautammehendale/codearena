@@ -4,6 +4,7 @@ import { useParams, useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { Swords, Play, Loader, CheckCircle, XCircle, Send, Trophy, Clock, ChevronDown, ChevronUp, X } from 'lucide-react';
 import api, { submissionsApi } from '@/lib/api';
+import RunResultPanel from '@/components/ui/RunResultPanel';
 import { connectSocket } from '@/lib/socket';
 import { useAuthStore } from '@/lib/store';
 
@@ -45,44 +46,6 @@ function Confetti({ show }: { show: boolean }) {
   );
 }
 
-// Run result panel (expandable)
-function RunPanel({ result, onClose }: { result: any; onClose: () => void }) {
-  const [expanded, setExpanded] = useState<number | null>(0);
-  const allPassed = result.testResults?.every((t: any) => t.passed);
-  return (
-    <div className="border-t border-gray-800 bg-gray-950">
-      <div className={`flex items-center gap-2 px-3 py-2 border-b border-gray-800 ${allPassed ? 'bg-green-950/30' : 'bg-red-950/20'}`}>
-        {allPassed ? <CheckCircle size={14} className="text-green-400" /> : <XCircle size={14} className="text-red-400" />}
-        <span className={`text-xs font-semibold ${allPassed ? 'text-green-400' : 'text-red-400'}`}>{allPassed ? 'Sample Tests Passed' : result.status}</span>
-        <span className="text-gray-600 text-xs ml-1">· 2 sample cases</span>
-        <button onClick={onClose} className="ml-auto text-gray-600 hover:text-white"><X size={12} /></button>
-      </div>
-      <div className="max-h-40 overflow-y-auto">
-        {result.testResults?.map((tr: any, i: number) => (
-          <div key={i} className="border-b border-gray-800/50 last:border-0">
-            <button onClick={() => setExpanded(expanded === i ? null : i)}
-              className={`w-full flex items-center gap-2 px-3 py-2 text-xs text-left hover:bg-gray-900/40 ${tr.passed ? 'text-green-400' : 'text-red-400'}`}>
-              {tr.passed ? <CheckCircle size={12} /> : <XCircle size={12} />}
-              Case {tr.testCase}: {tr.passed ? 'Passed' : tr.status}
-              {tr.runtime && <span className="text-gray-500 ml-1">{tr.runtime}ms</span>}
-              <span className="ml-auto text-gray-600">{expanded === i ? <ChevronUp size={12} /> : <ChevronDown size={12} />}</span>
-            </button>
-            {expanded === i && (
-              <div className="px-3 pb-2 space-y-1.5 bg-gray-900/20">
-                {tr.input && <div><p className="text-xs text-gray-600 mb-0.5">Input</p><pre className="bg-gray-900 border border-gray-700 rounded px-2 py-1.5 text-xs text-gray-300 font-mono overflow-x-auto">{tr.input}</pre></div>}
-                <div className="grid grid-cols-2 gap-1.5">
-                  <div><p className="text-xs text-gray-600 mb-0.5">Your Output</p><pre className={`bg-gray-900 border rounded px-2 py-1.5 text-xs font-mono overflow-x-auto ${tr.passed?'border-green-800/40 text-green-300':'border-red-800/40 text-red-300'}`}>{tr.output||'(empty)'}</pre></div>
-                  <div><p className="text-xs text-gray-600 mb-0.5">Expected</p><pre className="bg-gray-900 border border-green-800/40 rounded px-2 py-1.5 text-xs text-green-300 font-mono overflow-x-auto">{tr.expected}</pre></div>
-                </div>
-                {tr.error && <div><p className="text-xs text-gray-600 mb-0.5">Error</p><pre className="bg-gray-900 border border-yellow-800/30 rounded px-2 py-1.5 text-xs text-yellow-300 font-mono overflow-x-auto">{tr.error}</pre></div>}
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
 
 interface ChatMessage { id: string; username: string; message: string; created_at: string; user_id: string; }
 
@@ -462,7 +425,7 @@ export default function BattleArenaPage() {
                 <div className="flex-1 overflow-y-auto">
                   {/* Run result */}
                   {runResult && activeResultTab==='run' && (
-                    <RunPanel result={runResult} onClose={() => { setRunResult(null); if (result) setActiveResultTab('submit'); }} />
+                    <RunResultPanel result={runResult} onClose={() => { setRunResult(null); if (result) setActiveResultTab('submit'); }} />
                   )}
                   {/* Submit result */}
                   {result && activeResultTab==='submit' && (
