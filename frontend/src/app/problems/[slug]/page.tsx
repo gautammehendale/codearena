@@ -220,6 +220,7 @@ export default function ProblemPage() {
   const [runResult, setRunResult] = useState<any>(null);
   const [activeResultTab, setActiveResultTab] = useState<'submit' | 'run'>('submit');
   const [panelHeight, setPanelHeight] = useState(220);
+  const submissionCodeLoaded = useRef(false); // prevent language-change from overriding loaded code
   const draggingRef = useRef(false);
   const dragStartY = useRef(0);
   const dragStartH = useRef(0);
@@ -258,15 +259,19 @@ export default function ProblemPage() {
         try {
           const lastSub = await api.get(`/submissions/last/${r.data.id}`);
           if (lastSub.data?.code) {
-            setCode(lastSub.data.code);
+            submissionCodeLoaded.current = true; // prevent language effect from overriding
             setLanguage(lastSub.data.language);
+            setCode(lastSub.data.code);
           }
         } catch {}
       }
     }).catch(() => {});
   }, [slug, user]);
 
-  useEffect(() => { setCode(STARTERS[language] || ''); }, [language]);
+  // Only reset to starter if user manually changed language (not when loaded from submission)
+  useEffect(() => {
+    if (!submissionCodeLoaded.current) setCode(STARTERS[language] || '');
+  }, [language]);
 
   useEffect(() => {
     if (!submissionId || !user) return;
@@ -449,7 +454,7 @@ export default function ProblemPage() {
       <div className="flex-1 flex flex-col min-h-0">
         {/* Toolbar */}
         <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-800 bg-gray-900/50">
-          <select value={language} onChange={e => setLanguage(e.target.value)}
+          <select value={language} onChange={e => { submissionCodeLoaded.current = false; setLanguage(e.target.value); }}
             className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-blue-500 text-gray-200">
             {LANGUAGES.map(l => <option key={l.value} value={l.value}>{l.label}</option>)}
           </select>

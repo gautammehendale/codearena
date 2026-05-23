@@ -99,6 +99,7 @@ export default function BattleArenaPage() {
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<any>(null);
   const [runResult, setRunResult] = useState<any>(null);
+  const [activeResultTab, setActiveResultTab] = useState<'submit' | 'run'>('submit');
   const [panelHeight, setPanelHeight] = useState(180);
   const draggingRef = useRef(false);
   const dragStartY = useRef(0);
@@ -186,7 +187,7 @@ export default function BattleArenaPage() {
       if (data.userId === user.id) setMyProgress({ testsPassed: data.testsPassed, totalTests: data.totalTests, solved: data.solved });
       else setOppProgress({ testsPassed: data.testsPassed, totalTests: data.totalTests, solved: data.solved });
     });
-    socket.on('submission_update', (data: any) => { setResult(data); setSubmitting(false); });
+    socket.on('submission_update', (data: any) => { setResult(data); setSubmitting(false); setActiveResultTab('submit'); });
     socket.on('battle_end', (data: any) => { setWinner(data.winnerId); setTieWindow(null); });
     socket.on('battle_tie', () => { setWinner('draw'); setTieWindow(null); });
     socket.on('battle_tie_window', (data: any) => {
@@ -214,7 +215,7 @@ export default function BattleArenaPage() {
 
   const handleRun = async () => {
     if (!problem || !user) return;
-    setRunning(true); setRunResult(null);
+    setRunning(true); setRunResult(null); setActiveResultTab('run');
     try {
       const res = await submissionsApi.run({ problemId: problem.id, language, code });
       setRunResult(res.data);
@@ -435,24 +436,46 @@ export default function BattleArenaPage() {
               <MonacoEditor height="100%" language={language} value={code} onChange={v => setCode(v || '')}
                 theme="vs-dark" options={{ fontSize: 13, minimap: { enabled: false }, padding: { top: 12 } }} />
             </div>
-            {/* Draggable result panel */}
+            {/* Draggable result panel — same as problems page */}
             {(runResult || result) && (
-              <div style={{ height: panelHeight }} className="border-t border-gray-800 flex flex-col overflow-hidden">
+              <div style={{ height: panelHeight }} className="border-t border-gray-800 flex flex-col overflow-hidden flex-shrink-0">
                 <div onMouseDown={onDragStart}
-                  className="h-1.5 bg-gray-800 hover:bg-blue-500/50 cursor-row-resize flex items-center justify-center group flex-shrink-0 transition-colors">
-                  <div className="w-8 h-0.5 bg-gray-600 group-hover:bg-blue-400 rounded-full transition-colors" />
+                  className="h-2 bg-gray-800/80 hover:bg-blue-500/40 cursor-row-resize flex items-center justify-center group flex-shrink-0 transition-colors"
+                  title="Drag to resize">
+                  <div className="w-10 h-0.5 bg-gray-600 group-hover:bg-blue-400 rounded-full transition-colors" />
+                </div>
+                {/* Tabs */}
+                <div className="flex border-b border-gray-800 flex-shrink-0">
+                  {result && (
+                    <button onClick={() => setActiveResultTab('submit')}
+                      className={`px-3 py-1.5 text-xs font-medium transition-colors ${activeResultTab==='submit'?'text-blue-400 border-b-2 border-blue-400':'text-gray-400 hover:text-white'}`}>
+                      Submit {result.status==='Accepted'?'✓':'✗'}
+                    </button>
+                  )}
+                  {runResult && (
+                    <button onClick={() => setActiveResultTab('run')}
+                      className={`px-3 py-1.5 text-xs font-medium transition-colors ${activeResultTab==='run'?'text-blue-400 border-b-2 border-blue-400':'text-gray-400 hover:text-white'}`}>
+                      Run {runResult.testResults?.every((t:any)=>t.passed)?'✓':'✗'}
+                    </button>
+                  )}
                 </div>
                 <div className="flex-1 overflow-y-auto">
-                  {runResult && <RunPanel result={runResult} onClose={() => setRunResult(null)} />}
-                  {result && !runResult && (
-                    <div className="p-3 bg-gray-900/60 h-full">
-                      <div className={`flex items-center gap-2 text-sm font-semibold mb-2 ${result.status==='Accepted'?'text-green-400':'text-red-400'}`}>
-                        {result.status==='Accepted'?<CheckCircle size={15}/>:<XCircle size={15}/>} {result.status}
-                        {result.runtime && <span className="text-gray-400 font-normal text-xs">· {result.runtime}ms</span>}
+                  {/* Run result */}
+                  {runResult && activeResultTab==='run' && (
+                    <RunPanel result={runResult} onClose={() => { setRunResult(null); if (result) setActiveResultTab('submit'); }} />
+                  )}
+                  {/* Submit result */}
+                  {result && activeResultTab==='submit' && (
+                    <div className="bg-gray-950 h-full">
+                      <div className={`flex items-center gap-2 px-3 py-2.5 border-b border-gray-800 ${result.status==='Accepted'?'bg-green-950/30':'bg-red-950/20'}`}>
+                        {result.status==='Accepted'?<CheckCircle size={15} className="text-green-400"/>:<XCircle size={15} className="text-red-400"/>}
+                        <span className={`font-semibold text-sm ${result.status==='Accepted'?'text-green-400':'text-red-400'}`}>{result.status}</span>
+                        {result.runtime && <span className="text-gray-400 text-xs">· {result.runtime}ms</span>}
                         {result.status==='Accepted' && <span className="ml-auto text-xs bg-green-500/10 text-green-400 px-2 py-0.5 rounded-full">All tests passed ✓</span>}
+                        <button onClick={() => setResult(null)} className="ml-1 text-gray-600 hover:text-white"><X size={12}/></button>
                       </div>
-                      <div className="grid grid-cols-2 gap-1.5">
-                        {result.testResults?.map((tr: any, i: number) => (
+                      <div className="p-2 grid grid-cols-2 gap-1.5">
+                        {result.testResults?.map((tr:any, i:number) => (
                           <div key={i} className={`text-xs px-2 py-1.5 rounded-lg flex items-center gap-1.5 ${tr.passed?'bg-green-900/20 text-green-300 border border-green-800/40':'bg-red-900/20 text-red-300 border border-red-800/40'}`}>
                             {tr.passed?<CheckCircle size={11}/>:<XCircle size={11}/>}
                             Test {tr.testCase}: {tr.passed?'Passed':tr.status}
