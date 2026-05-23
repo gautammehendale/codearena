@@ -174,26 +174,42 @@ export default function BattlesPage() {
         <div className="glass rounded-xl p-6 flex flex-col">
           <h2 className="font-semibold mb-2 flex items-center gap-2"><Users size={18} className="text-purple-400" /> Enrollment</h2>
           <div className="flex-1 flex flex-col items-center justify-center text-center py-4">
-            <div className="text-5xl font-bold text-purple-400 mb-1">
-              {enrollment.loaded ? enrollment.totalEnrolled : '—'}
-            </div>
-            <div className="text-gray-400 text-sm mb-6">players enrolled today</div>
-            {enrollment.totalEnrolled % 2 === 1 && enrollment.totalEnrolled > 0 && (
-              <div className="flex items-center gap-2 text-xs text-gray-500 mb-4 bg-gray-800/50 px-3 py-1.5 rounded-full">
-                <Bot size={14} /> Odd number — 1 player gets a bot opponent
+
+            {/* Active battle — can't enroll */}
+            {activeBattle ? (
+              <div className="w-full space-y-4">
+                <div className="text-4xl">⚔️</div>
+                <p className="text-gray-300 font-medium">You're in an active battle!</p>
+                <p className="text-gray-500 text-sm">Finish your current battle first.<br/>Enrollment for the next battle opens automatically once you're done.</p>
+                <button onClick={() => router.push(`/battles/${activeBattle.id}`)}
+                  className="w-full py-3 rounded-xl font-semibold text-sm bg-purple-600 hover:bg-purple-700 text-white transition-all">
+                  Back to Arena →
+                </button>
               </div>
-            )}
-            {!enrollment.loaded ? (
-              <div className="w-full py-3 rounded-xl text-center text-sm bg-gray-800/50 text-gray-600 animate-pulse">Loading...</div>
-            ) : schedule.enrollmentOpen ? (
-              <button onClick={handleEnroll} disabled={loading || !!activeBattle}
-                className={`w-full py-3 rounded-xl font-semibold text-sm transition-all ${enrollment.enrolled ? 'bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-500/30' : 'bg-purple-600 hover:bg-purple-700 text-white'}`}>
-                {loading ? <Loader size={16} className="animate-spin mx-auto" /> : enrollment.enrolled ? '✓ Enrolled — Click to withdraw' : 'Enroll for Today\'s Battle'}
-              </button>
             ) : (
-              <div className={`w-full py-3 rounded-xl text-center text-sm ${enrollment.enrolled ? 'bg-green-500/20 text-green-400 border border-green-500/30' : 'bg-gray-800 text-gray-500'}`}>
-                {enrollment.enrolled ? `✓ You're enrolled — ${enrollment.status}` : 'Enrollment closed for today'}
-              </div>
+              <>
+                <div className="text-5xl font-bold text-purple-400 mb-1">
+                  {enrollment.loaded ? enrollment.totalEnrolled : '—'}
+                </div>
+                <div className="text-gray-400 text-sm mb-6">players enrolled</div>
+                {enrollment.totalEnrolled % 2 === 1 && enrollment.totalEnrolled > 0 && (
+                  <div className="flex items-center gap-2 text-xs text-gray-500 mb-4 bg-gray-800/50 px-3 py-1.5 rounded-full">
+                    <Bot size={14} /> Odd number — 1 player gets a bot
+                  </div>
+                )}
+                {!enrollment.loaded ? (
+                  <div className="w-full py-3 rounded-xl text-center text-sm bg-gray-800/50 text-gray-600 animate-pulse">Loading...</div>
+                ) : schedule.enrollmentOpen ? (
+                  <button onClick={handleEnroll} disabled={loading}
+                    className={`w-full py-3 rounded-xl font-semibold text-sm transition-all ${enrollment.enrolled ? 'bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-500/30' : 'bg-purple-600 hover:bg-purple-700 text-white'}`}>
+                    {loading ? <Loader size={16} className="animate-spin mx-auto" /> : enrollment.enrolled ? '✓ Enrolled — Click to withdraw' : 'Enroll for Today\'s Battle'}
+                  </button>
+                ) : (
+                  <div className={`w-full py-3 rounded-xl text-center text-sm ${enrollment.enrolled ? 'bg-green-500/20 text-green-400 border border-green-500/30' : 'bg-gray-800 text-gray-500'}`}>
+                    {enrollment.enrolled ? `✓ You're enrolled — ${enrollment.status}` : 'Enrollment opens 30 mins before next battle'}
+                  </div>
+                )}
+              </>
             )}
           </div>
         </div>
