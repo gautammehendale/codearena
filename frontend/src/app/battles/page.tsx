@@ -245,7 +245,7 @@ export default function BattlesPage() {
         <h2 className="font-semibold mb-4">How 1v1 Battles Work</h2>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {[
-            { step: '1', icon: '📋', title: 'Enroll', desc: 'Open 30 mins before each battle (:30 and :00)' },
+            { step: '1', icon: '📋', title: 'Enroll', desc: 'Opens 30 mins before each battle. Up to 2 players matched.' },
             { step: '2', icon: '🎯', title: 'Get Matched', desc: '5 mins before start. Odd player gets a bot' },
             { step: '3', icon: '⚙️', title: 'Choose Difficulty', desc: '2 min lobby — both agree on Easy/Medium/Hard' },
             { step: '4', icon: '⚔️', title: 'Battle!', desc: 'Exclusive problem revealed at start. First to solve wins 50 pts' },
