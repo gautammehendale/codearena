@@ -1,5 +1,17 @@
 import axios from 'axios';
 
+// Simple in-memory cache — survives tab switches, cleared on page refresh
+const _cache: Record<string, { data: any; ts: number }> = {};
+export function cached<T>(key: string, fetcher: () => Promise<T>, ttlMs = 30000): Promise<T> {
+  const now = Date.now();
+  if (_cache[key] && now - _cache[key].ts < ttlMs) return Promise.resolve(_cache[key].data as T);
+  return fetcher().then(data => { _cache[key] = { data, ts: now }; return data; });
+}
+export function invalidateCache(key?: string) {
+  if (key) delete _cache[key];
+  else Object.keys(_cache).forEach(k => delete _cache[k]);
+}
+
 const api = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api',
   withCredentials: true,

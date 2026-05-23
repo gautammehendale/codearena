@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Swords, Clock, Users, Trophy, Loader, CheckCircle, Calendar, Bot } from 'lucide-react';
-import api from '@/lib/api';
+import api, { cached, invalidateCache } from '@/lib/api';
 import { useAuthStore } from '@/lib/store';
 import { connectSocket } from '@/lib/socket';
 
@@ -41,14 +41,15 @@ export default function BattlesPage() {
 
   const fetchAll = async () => {
     const [sched, lb] = await Promise.all([
-      api.get('/battles/schedule').then(r => r.data),
-      api.get('/battles/leaderboard').then(r => r.data).catch(() => []),
+      cached('battles/schedule', () => api.get('/battles/schedule').then(r => r.data), 15000),
+      cached('battles/leaderboard', () => api.get('/battles/leaderboard').then(r => r.data), 30000).catch(() => []),
     ]);
     setSchedule(sched);
     setLeaderboard(lb);
     if (user) {
       const [enroll, active] = await Promise.all([
-        api.get('/battles/enrollment').then(r => r.data).catch(() => ({ enrolled: false, totalEnrolled: 0, status: null })),
+        cached(`battles/enrollment/${user.id}`, () => api.get('/battles/enrollment').then(r => r.data), 10000)
+          .catch(() => ({ enrolled: false, totalEnrolled: 0, status: null })),
         api.get('/battles/active').then(r => r.data).catch(() => ({ battle: null })),
       ]);
       setEnrollment({ ...enroll, loaded: true });
@@ -91,9 +92,11 @@ export default function BattlesPage() {
     try {
       if (enrollment.enrolled) {
         await api.delete('/battles/enroll');
-        setEnrollment(p => ({ ...p, enrolled: false, totalEnrolled: p.totalEnrolled - 1 }));
+        invalidateCache(`battles/enrollment/${user?.id}`);
+        setEnrollment(p => ({ ...p, enrolled: false, totalEnrolled: Math.max(0, p.totalEnrolled - 1) }));
       } else {
         const res = await api.post('/battles/enroll');
+        invalidateCache(`battles/enrollment/${user?.id}`);
         setEnrollment({ enrolled: true, totalEnrolled: res.data.totalEnrolled, status: 'enrolled', loaded: true });
       }
     } catch (err: any) {

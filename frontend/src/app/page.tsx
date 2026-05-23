@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Code2, Trophy, Zap, Users, ChevronRight, Terminal, Swords, Flame } from 'lucide-react';
 import { useAuthStore } from '@/lib/store';
-import api from '@/lib/api';
+import api, { cached } from '@/lib/api';
 
 const features = [
   { icon: Code2, title: 'Multi-Language Editor', desc: 'Monaco Editor (VS Code engine) supporting Python, JavaScript, Java, C++, and C — the same editor millions use daily.' },
@@ -18,17 +18,19 @@ interface Stats { totalUsers: number; totalProblems: number; totalSolved: number
 
 export default function Home() {
   const { user } = useAuthStore();
-  const [stats, setStats] = useState<Stats>({ totalUsers: 0, totalProblems: 0, totalSolved: 0 });
+  const [stats, setStats] = useState<Stats | null>(null);
 
   useEffect(() => {
-    api.get('/stats/public').then(r => setStats(r.data)).catch(() => {});
+    // Use cache so re-visiting homepage doesn't flash
+    cached('stats/public', () => api.get('/stats/public').then(r => r.data), 60000)
+      .then(data => setStats(data)).catch(() => {});
   }, []);
 
   const statItems = [
-    { label: 'Problems', value: stats.totalProblems || '100+' },
+    { label: 'Problems', value: stats ? stats.totalProblems : '—' },
     { label: 'Languages', value: '5' },
-    { label: 'Solutions Submitted', value: stats.totalSolved > 0 ? stats.totalSolved.toLocaleString() : '0' },
-    { label: 'Active Users', value: stats.totalUsers > 0 ? stats.totalUsers.toLocaleString() : '0' },
+    { label: 'Solutions Submitted', value: stats ? (stats.totalSolved > 0 ? stats.totalSolved.toLocaleString() : '0') : '—' },
+    { label: 'Active Users', value: stats ? (stats.totalUsers > 0 ? stats.totalUsers.toLocaleString() : '0') : '—' },
   ];
 
   return (
