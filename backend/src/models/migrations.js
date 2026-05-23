@@ -17,6 +17,8 @@ async function runMigrations() {
       ALTER TABLE users ADD COLUMN IF NOT EXISTS battle_losses INTEGER DEFAULT 0;
 
       ALTER TABLE battle_enrollments ADD COLUMN IF NOT EXISTS scheduled_battle_time TIMESTAMP;
+      ALTER TABLE problems ADD COLUMN IF NOT EXISTS is_battle_exclusive BOOLEAN DEFAULT FALSE;
+      ALTER TABLE problems ADD COLUMN IF NOT EXISTS battle_revealed_at TIMESTAMP;
 
       CREATE TABLE IF NOT EXISTS battle_enrollments (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

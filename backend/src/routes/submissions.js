@@ -88,6 +88,19 @@ router.get('/:id', authenticate, async (req, res) => {
   }
 });
 
+// GET last submission code for a problem (for code restore)
+router.get('/last/:problemId', authenticate, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT id, language, code, status, created_at FROM submissions
+       WHERE user_id=$1 AND problem_id=$2
+       ORDER BY created_at DESC LIMIT 1`,
+      [req.user.id, req.params.problemId]
+    );
+    res.json(result.rows[0] || null);
+  } catch { res.json(null); }
+});
+
 // GET runtime distribution for runtime chart
 router.get('/runtimes/:problemId', async (req, res) => {
   try {

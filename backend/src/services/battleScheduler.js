@@ -89,10 +89,17 @@ async function startBattles(io, battleTime) {
 
   for (const b of lobbies.rows) {
     const difficulty = b.difficulty || b.player1_pref || 'Medium';
-    const problem = await pool.query(
-      `SELECT id FROM problems WHERE difficulty=$1 AND is_premium=FALSE ORDER BY RANDOM() LIMIT 1`,
+    // Prefer battle-exclusive problems, fall back to regular if none
+    let problem = await pool.query(
+      `SELECT id FROM problems WHERE difficulty=$1 AND is_battle_exclusive=TRUE AND battle_revealed_at IS NULL ORDER BY RANDOM() LIMIT 1`,
       [difficulty]
     );
+    if (!problem.rows.length) {
+      problem = await pool.query(
+        `SELECT id FROM problems WHERE difficulty=$1 AND is_premium=FALSE ORDER BY RANDOM() LIMIT 1`,
+        [difficulty]
+      );
+    }
     if (!problem.rows.length) continue;
     const probId = problem.rows[0].id;
     await pool.query(
@@ -128,6 +135,15 @@ async function endBattle(io, battleId, winnerId) {
     // Draw — both get 25 points, no win/loss recorded
     await pool.query('UPDATE users SET points=points+25 WHERE id=$1 OR id=$2', [b.player1_id, b.player2_id]);
   }
+  // Reveal battle-exclusive problem to public pool after battle ends
+  if (b.problem_id) {
+    await pool.query(
+      `UPDATE problems SET is_battle_exclusive=FALSE, battle_revealed_at=NOW()
+       WHERE id=$1 AND is_battle_exclusive=TRUE`,
+      [b.problem_id]
+    ).catch(() => {});
+  }
+
   io?.to(`battle:${battleId}`).emit('battle_end', { battleId, winnerId });
   io?.to(`user:${b.player1_id}`).emit('battle_end', { battleId, winnerId, won: b.player1_id === winnerId });
   if (!b.is_bot && b.player2_id) io?.to(`user:${b.player2_id}`).emit('battle_end', { battleId, winnerId, won: b.player2_id === winnerId });
