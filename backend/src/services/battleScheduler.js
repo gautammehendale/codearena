@@ -137,11 +137,22 @@ async function endBattle(io, battleId, winnerId) {
   }
   // Reveal battle-exclusive problem to public pool after battle ends
   if (b.problem_id) {
-    await pool.query(
+    const revealed = await pool.query(
       `UPDATE problems SET is_battle_exclusive=FALSE, battle_revealed_at=NOW()
-       WHERE id=$1 AND is_battle_exclusive=TRUE`,
+       WHERE id=$1 AND is_battle_exclusive=TRUE RETURNING difficulty`,
       [b.problem_id]
-    ).catch(() => {});
+    ).catch(() => ({ rows: [] }));
+
+    // Auto-generate a replacement battle problem to keep the pool full
+    if (revealed.rows.length) {
+      const diff = revealed.rows[0].difficulty;
+      logger.info(`Battle problem revealed (${diff}). Generating replacement...`);
+      setTimeout(async () => {
+        const { generateBattleProblem } = require('./problemGenerator');
+        const newProb = await generateBattleProblem(diff);
+        if (newProb) logger.info(`Replacement generated: "${newProb.title}"`);
+      }, 3000); // 3s delay so battle end completes first
+    }
   }
 
   io?.to(`battle:${battleId}`).emit('battle_end', { battleId, winnerId });
@@ -172,6 +183,11 @@ function setupBattleScheduler(io) {
   }, 60000);
 
   logger.info('Battle scheduler: every 30 mins (:00 and :30) — match@:55/:25, lobby@:58/:28, start@:00/:30');
+
+  // Check battle pool health every 6 hours and auto-generate if low
+  const { maintainBattlePool } = require('./problemGenerator');
+  maintainBattlePool(10).catch(() => {}); // initial check on startup
+  setInterval(() => maintainBattlePool(10).catch(() => {}), 6 * 60 * 60 * 1000);
 }
 
 module.exports = { setupBattleScheduler, endBattle, runMatchmaking };

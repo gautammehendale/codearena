@@ -113,7 +113,7 @@ export default function BattlesPage() {
         <h1 className="text-3xl font-bold">1v1 Battles</h1>
         <span className="px-2.5 py-0.5 bg-purple-500/20 text-purple-400 border border-purple-500/30 rounded-full text-xs">Every Hour</span>
       </div>
-      <p className="text-gray-400 mb-8">Battles every 30 mins (:00 and :30). Enroll up to 30 mins before. Matching at 5 mins before. Battle starts on time.</p>
+      <p className="text-gray-400 mb-8">Battles every 30 mins. Enroll up to 30 mins before. Matching at 5 mins before. Battle starts on time.</p>
 
       {/* Active Battle Banner */}
       {activeBattle && (

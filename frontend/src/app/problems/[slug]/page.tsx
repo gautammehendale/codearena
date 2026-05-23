@@ -3,7 +3,7 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { Play, Clock, Cpu, CheckCircle, XCircle, Loader, Lightbulb, Lock, ChevronRight, ChevronDown, ChevronUp, X } from 'lucide-react';
-import { problemsApi, submissionsApi, hintsApi } from '@/lib/api';
+import api, { problemsApi, submissionsApi, hintsApi } from '@/lib/api';
 import { connectSocket } from '@/lib/socket';
 import { useAuthStore } from '@/lib/store';
 
@@ -236,9 +236,20 @@ export default function ProblemPage() {
   const [hintError, setHintError] = useState('');
 
   useEffect(() => {
-    problemsApi.get(slug).then(r => {
+    problemsApi.get(slug).then(async r => {
       setProblem(r.data);
-      if (user) hintsApi.getStatus(r.data.id).then(s => setHintsUsed(s.data.hintsUsed)).catch(() => {});
+      if (user) {
+        // Load hint status
+        hintsApi.getStatus(r.data.id).then(s => setHintsUsed(s.data.hintsUsed)).catch(() => {});
+        // Restore last submission code (like LeetCode)
+        try {
+          const lastSub = await api.get(`/submissions/last/${r.data.id}`);
+          if (lastSub.data?.code) {
+            setCode(lastSub.data.code);
+            setLanguage(lastSub.data.language);
+          }
+        } catch {}
+      }
     }).catch(() => {});
   }, [slug, user]);
 
