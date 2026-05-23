@@ -158,9 +158,21 @@ const diffColor: Record<string, string> = {
 
 interface Hint { text: string; number: number; }
 
+// Strip solution-giving sections from descriptions (leave those for hints)
+function stripSolutionSections(desc: string): string {
+  const STRIP_MARKERS = [
+    /EFFICIENT APPROACH[\s\S]*?(?=\n─|$)/gi,
+    /ALGORITHM[\s\S]*?(?=\n─|Example|Constraint|$)/gi,
+  ];
+  let result = desc;
+  for (const re of STRIP_MARKERS) result = result.replace(re, '');
+  return result.replace(/\n{3,}/g, '\n\n').trim();
+}
+
 // Parse description into structured sections
 function parseDescription(desc: string) {
   if (!desc) return { main: '', examples: [], constraints: '' };
+  desc = stripSolutionSections(desc);
   const lines = desc.split('\n');
   const examples: { input: string; output: string; explanation?: string }[] = [];
   let main = '';
@@ -206,6 +218,7 @@ export default function ProblemPage() {
   const [submissionId, setSubmissionId] = useState<string | null>(null);
   const [result, setResult] = useState<any>(null);
   const [runResult, setRunResult] = useState<any>(null);
+  const [activeResultTab, setActiveResultTab] = useState<'submit' | 'run'>('submit');
   const [panelHeight, setPanelHeight] = useState(220);
   const draggingRef = useRef(false);
   const dragStartY = useRef(0);
@@ -260,7 +273,7 @@ export default function ProblemPage() {
     const socket = connectSocket(user.id);
     socket.emit('join_submission', submissionId);
     const handler = (data: any) => {
-      if (data.submissionId === submissionId) { setResult(data); setSubmitting(false); }
+      if (data.submissionId === submissionId) { setResult(data); setSubmitting(false); setActiveResultTab('submit'); }
     };
     socket.on('submission_update', handler);
     return () => { socket.off('submission_update', handler); };
@@ -268,7 +281,7 @@ export default function ProblemPage() {
 
   const handleRun = async () => {
     if (!user) { window.location.href = '/login'; return; }
-    setRunning(true); setRunResult(null);
+    setRunning(true); setRunResult(null); setActiveResultTab('run');
     try {
       const res = await submissionsApi.run({ problemId: problem.id, language, code });
       setRunResult(res.data);
@@ -490,29 +503,36 @@ export default function ProblemPage() {
               <div className="w-12 h-0.5 bg-gray-600 group-hover:bg-blue-400 rounded-full transition-colors" />
             </div>
             <div className="flex-1 overflow-hidden flex flex-col">
-              {/* Tab switcher if both exist */}
-              {runResult && result && (
+              {/* Tab switcher — persists both results, just toggles view */}
+              {(runResult || result) && (
                 <div className="flex border-b border-gray-800 flex-shrink-0">
-                  <button onClick={() => setRunResult(null)} className="px-4 py-1.5 text-xs text-blue-400 border-b-2 border-blue-400 font-medium">Submit</button>
-                  <button onClick={() => setResult(null)} className="px-4 py-1.5 text-xs text-gray-400 hover:text-white">Run</button>
+                  {result && (
+                    <button onClick={() => setActiveResultTab('submit')}
+                      className={`px-4 py-1.5 text-xs font-medium transition-colors ${activeResultTab === 'submit' ? 'text-blue-400 border-b-2 border-blue-400' : 'text-gray-400 hover:text-white'}`}>
+                      Submit {result.status === 'Accepted' ? '✓' : '✗'}
+                    </button>
+                  )}
+                  {runResult && (
+                    <button onClick={() => setActiveResultTab('run')}
+                      className={`px-4 py-1.5 text-xs font-medium transition-colors ${activeResultTab === 'run' ? 'text-blue-400 border-b-2 border-blue-400' : 'text-gray-400 hover:text-white'}`}>
+                      Run {runResult.testResults?.every((t: any) => t.passed) ? '✓' : '✗'}
+                    </button>
+                  )}
                 </div>
               )}
               <div className="flex-1 overflow-y-auto">
                 {/* Run result */}
-                {runResult && !result && <RunResultPanel result={runResult} onClose={() => setRunResult(null)} />}
-                {/* Submit result */}
-                {result && (
+                {runResult && activeResultTab === 'run' && <RunResultPanel result={runResult} onClose={() => { setRunResult(null); if (result) setActiveResultTab('submit'); }} />}
+                {/* Submit result — clean, no chart */}
+                {result && activeResultTab === 'submit' && (
                   <div className="bg-gray-950 h-full">
-                    <div className={`flex items-center gap-2.5 px-4 py-3 border-b border-gray-800 flex-shrink-0 ${result.status === 'Accepted' ? 'bg-green-950/30' : 'bg-red-950/20'}`}>
+                    <div className={`flex items-center gap-2.5 px-4 py-3 border-b border-gray-800 ${result.status === 'Accepted' ? 'bg-green-950/30' : 'bg-red-950/20'}`}>
                       {result.status === 'Accepted' ? <CheckCircle size={18} className="text-green-400" /> : <XCircle size={18} className="text-red-400" />}
                       <span className={`font-semibold ${result.status === 'Accepted' ? 'text-green-400' : 'text-red-400'}`}>{result.status}</span>
                       {result.runtime && <span className="text-gray-400 text-sm">· {result.runtime}ms</span>}
                       {result.status === 'Accepted' && <span className="ml-auto text-xs bg-green-500/10 text-green-400 px-3 py-0.5 rounded-full">All {result.testResults?.length} tests passed ✓</span>}
-                      <button onClick={() => setResult(null)} className="ml-auto text-gray-600 hover:text-white"><X size={14} /></button>
+                      <button onClick={() => setResult(null)} className="ml-2 text-gray-600 hover:text-white"><X size={14} /></button>
                     </div>
-                    {result.status === 'Accepted' && result.runtime && problem?.id && (
-                      <RuntimeChart runtime={result.runtime} problemId={problem.id} />
-                    )}
                     <div className="p-3 grid grid-cols-2 gap-2">
                       {result.testResults?.map((tr: any, i: number) => (
                         <div key={i} className={`text-xs px-3 py-2 rounded-lg flex items-center gap-2 ${tr.passed ? 'bg-green-900/20 text-green-300 border border-green-800/40' : 'bg-red-900/20 text-red-300 border border-red-800/40'}`}>

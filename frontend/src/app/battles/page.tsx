@@ -180,7 +180,9 @@ export default function BattlesPage() {
                 <Bot size={14} /> Odd number — 1 player gets a bot opponent
               </div>
             )}
-            {schedule.enrollmentOpen ? (
+            {!enrollment.loaded ? (
+              <div className="w-full py-3 rounded-xl text-center text-sm bg-gray-800/50 text-gray-600 animate-pulse">Loading...</div>
+            ) : schedule.enrollmentOpen ? (
               <button onClick={handleEnroll} disabled={loading || !!activeBattle}
                 className={`w-full py-3 rounded-xl font-semibold text-sm transition-all ${enrollment.enrolled ? 'bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-500/30' : 'bg-purple-600 hover:bg-purple-700 text-white'}`}>
                 {loading ? <Loader size={16} className="animate-spin mx-auto" /> : enrollment.enrolled ? '✓ Enrolled — Click to withdraw' : 'Enroll for Today\'s Battle'}
@@ -202,7 +204,7 @@ export default function BattlesPage() {
             { step: '1', icon: '📋', title: 'Enroll', desc: 'Open 30 mins before each battle (:30 and :00)' },
             { step: '2', icon: '🎯', title: 'Get Matched', desc: '5 mins before start. Odd player gets a bot' },
             { step: '3', icon: '⚙️', title: 'Choose Difficulty', desc: '2 min lobby — both agree on Easy/Medium/Hard' },
-            { step: '4', icon: '⚔️', title: 'Battle!', desc: 'Every :00 and :30. First to solve wins 50 pts' },
+            { step: '4', icon: '⚔️', title: 'Battle!', desc: 'Exclusive problem revealed at start. First to solve wins 50 pts' },
           ].map(s => (
             <div key={s.step} className="text-center">
               <div className="text-3xl mb-2">{s.icon}</div>
