@@ -88,6 +88,17 @@ router.get('/:id', authenticate, async (req, res) => {
   }
 });
 
+// GET runtime distribution for runtime chart
+router.get('/runtimes/:problemId', async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT runtime FROM submissions WHERE problem_id=$1 AND status='Accepted' AND runtime IS NOT NULL ORDER BY runtime LIMIT 500`,
+      [req.params.problemId]
+    );
+    res.json({ runtimes: result.rows.map(r => r.runtime) });
+  } catch { res.json({ runtimes: [] }); }
+});
+
 router.get('/user/history', authenticate, async (req, res) => {
   const { page = 1, limit = 20, problemId } = req.query;
   const offset = (page - 1) * limit;

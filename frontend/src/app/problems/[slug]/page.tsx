@@ -9,56 +9,118 @@ import { useAuthStore } from '@/lib/store';
 
 const MonacoEditor = dynamic(() => import('@monaco-editor/react'), { ssr: false });
 
-function RunResultPanel({ result, onClose }: { result: any; onClose: () => void }) {
-  const [expanded, setExpanded] = useState<number | null>(0);
-  const allPassed = result.testResults?.every((t: any) => t.passed);
+// Runtime percentile chart
+function RuntimeChart({ runtime, problemId }: { runtime: number; problemId: string }) {
+  const [data, setData] = useState<number[]>([]);
+  const [percentile, setPercentile] = useState<number | null>(null);
+
+  useEffect(() => {
+    // Fetch accepted submission runtimes for this problem
+    fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api'}/submissions/runtimes/${problemId}`)
+      .then(r => r.json())
+      .then(d => {
+        if (d.runtimes?.length) {
+          setData(d.runtimes);
+          const faster = d.runtimes.filter((r: number) => r > runtime).length;
+          setPercentile(Math.round((faster / d.runtimes.length) * 100));
+        }
+      }).catch(() => {});
+  }, [problemId, runtime]);
+
+  if (!data.length) return (
+    <div className="text-center py-3 text-gray-500 text-xs">
+      Runtime: <span className="text-blue-400 font-bold">{runtime}ms</span>
+    </div>
+  );
+
+  const max = Math.max(...data, runtime);
+  const bucketSize = Math.max(50, Math.ceil(max / 20));
+  const buckets: number[] = Array(Math.ceil(max / bucketSize) + 1).fill(0);
+  data.forEach(r => { const b = Math.floor(r / bucketSize); if (b < buckets.length) buckets[b]++; });
+  const myBucket = Math.floor(runtime / bucketSize);
+  const maxCount = Math.max(...buckets, 1);
 
   return (
-    <div className="border-t border-gray-800 bg-gray-950">
-      <div className={`flex items-center gap-2 px-4 py-2.5 border-b border-gray-800 ${allPassed ? 'bg-green-950/40' : 'bg-red-950/30'}`}>
+    <div className="px-4 pb-3 pt-2">
+      <div className="flex items-end justify-between text-xs text-gray-500 mb-1">
+        <span>Runtime Distribution</span>
+        {percentile !== null && <span className="text-green-400 font-semibold">Beats {percentile}% of submissions</span>}
+      </div>
+      <div className="flex items-end gap-0.5 h-16">
+        {buckets.map((count, i) => (
+          <div key={i} className="flex-1 flex flex-col justify-end" title={`${i * bucketSize}-${(i + 1) * bucketSize}ms: ${count} submissions`}>
+            <div
+              style={{ height: `${(count / maxCount) * 100}%`, minHeight: count > 0 ? '2px' : '0' }}
+              className={`rounded-t-sm transition-all ${i === myBucket ? 'bg-blue-400' : 'bg-gray-700 hover:bg-gray-500'}`}
+            />
+          </div>
+        ))}
+      </div>
+      <div className="flex justify-between text-xs text-gray-600 mt-0.5">
+        <span>0ms</span>
+        <span className="text-blue-400">▲ {runtime}ms (you)</span>
+        <span>{max}ms</span>
+      </div>
+    </div>
+  );
+}
+
+function CaseDetail({ tr }: { tr: any }) {
+  return (
+    <div className="px-4 pb-3 space-y-2 bg-gray-900/20">
+      {tr.input !== undefined && tr.input !== '' && (
+        <div>
+          <p className="text-xs text-gray-500 mb-1 uppercase tracking-wider font-medium">Input</p>
+          <pre className="bg-gray-900 border border-gray-700 rounded px-3 py-2 text-xs text-gray-300 font-mono overflow-x-auto whitespace-pre-wrap">{tr.input}</pre>
+        </div>
+      )}
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <p className="text-xs text-gray-500 mb-1 uppercase tracking-wider font-medium">Your Output</p>
+          <pre className={`bg-gray-900 border rounded px-3 py-2 text-xs font-mono overflow-x-auto ${tr.passed ? 'border-green-800/40 text-green-300' : 'border-red-800/40 text-red-300'}`}>{tr.output || '(empty)'}</pre>
+        </div>
+        <div>
+          <p className="text-xs text-gray-500 mb-1 uppercase tracking-wider font-medium">Expected</p>
+          <pre className="bg-gray-900 border border-green-800/40 rounded px-3 py-2 text-xs text-green-300 font-mono overflow-x-auto">{tr.expected}</pre>
+        </div>
+      </div>
+      {tr.error && (
+        <div>
+          <p className="text-xs text-gray-500 mb-1 uppercase tracking-wider font-medium">Error</p>
+          <pre className="bg-gray-900 border border-yellow-800/30 rounded px-3 py-2 text-xs text-yellow-300 font-mono overflow-x-auto">{tr.error}</pre>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function RunResultPanel({ result, onClose }: { result: any; onClose: () => void }) {
+  // All cases expanded by default
+  const [collapsed, setCollapsed] = useState<Set<number>>(new Set());
+  const allPassed = result.testResults?.every((t: any) => t.passed);
+  const toggle = (i: number) => setCollapsed(p => { const s = new Set(p); s.has(i) ? s.delete(i) : s.add(i); return s; });
+
+  return (
+    <div className="bg-gray-950 h-full flex flex-col">
+      <div className={`flex items-center gap-2 px-4 py-2.5 border-b border-gray-800 flex-shrink-0 ${allPassed ? 'bg-green-950/40' : 'bg-red-950/30'}`}>
         {allPassed ? <CheckCircle size={16} className="text-green-400" /> : <XCircle size={16} className="text-red-400" />}
         <span className={`text-sm font-semibold ${allPassed ? 'text-green-400' : 'text-red-400'}`}>
           {allPassed ? 'Sample Tests Passed' : result.status || 'Failed'}
         </span>
-        <span className="text-xs text-gray-500 ml-1">— 2 sample cases</span>
+        <span className="text-xs text-gray-500 ml-1">— {result.testResults?.length || 2} sample cases</span>
         <button onClick={onClose} className="ml-auto text-gray-500 hover:text-white"><X size={14} /></button>
       </div>
-      <div className="max-h-52 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto">
         {result.testResults?.map((tr: any, i: number) => (
           <div key={i} className="border-b border-gray-800/50 last:border-0">
-            <button onClick={() => setExpanded(expanded === i ? null : i)}
+            <button onClick={() => toggle(i)}
               className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm text-left hover:bg-gray-900/40 transition-colors ${tr.passed ? 'text-green-400' : 'text-red-400'}`}>
               {tr.passed ? <CheckCircle size={14} /> : <XCircle size={14} />}
               <span className="font-medium">Case {tr.testCase}: {tr.passed ? 'Passed' : tr.status}</span>
               {tr.runtime && <span className="text-gray-500 text-xs ml-1">{tr.runtime}ms</span>}
-              <span className="ml-auto text-gray-600">{expanded === i ? <ChevronUp size={14} /> : <ChevronDown size={14} />}</span>
+              <span className="ml-auto text-gray-600">{!collapsed.has(i) ? <ChevronUp size={14} /> : <ChevronDown size={14} />}</span>
             </button>
-            {expanded === i && (
-              <div className="px-4 pb-3 space-y-2 bg-gray-900/20">
-                {tr.input !== undefined && tr.input !== '' && (
-                  <div>
-                    <p className="text-xs text-gray-500 mb-1 uppercase tracking-wider">Input</p>
-                    <pre className="bg-gray-900 border border-gray-700 rounded px-3 py-2 text-xs text-gray-300 font-mono overflow-x-auto whitespace-pre-wrap">{tr.input}</pre>
-                  </div>
-                )}
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <p className="text-xs text-gray-500 mb-1 uppercase tracking-wider">Your Output</p>
-                    <pre className={`bg-gray-900 border rounded px-3 py-2 text-xs font-mono overflow-x-auto ${tr.passed ? 'border-green-800/40 text-green-300' : 'border-red-800/40 text-red-300'}`}>{tr.output || '(empty)'}</pre>
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-500 mb-1 uppercase tracking-wider">Expected</p>
-                    <pre className="bg-gray-900 border border-green-800/40 rounded px-3 py-2 text-xs text-green-300 font-mono overflow-x-auto">{tr.expected}</pre>
-                  </div>
-                </div>
-                {tr.error && (
-                  <div>
-                    <p className="text-xs text-gray-500 mb-1 uppercase tracking-wider">Error</p>
-                    <pre className="bg-gray-900 border border-yellow-800/30 rounded px-3 py-2 text-xs text-yellow-300 font-mono overflow-x-auto">{tr.error}</pre>
-                  </div>
-                )}
-              </div>
-            )}
+            {!collapsed.has(i) && <CaseDetail tr={tr} />}
           </div>
         ))}
       </div>
@@ -359,8 +421,8 @@ export default function ProblemPage() {
         </div>
       </div>
 
-      {/* Right Panel */}
-      <div className="flex-1 flex flex-col">
+      {/* Right Panel — flex column, result panel shrinks editor */}
+      <div className="flex-1 flex flex-col min-h-0">
         {/* Toolbar */}
         <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-800 bg-gray-900/50">
           <select value={language} onChange={e => setLanguage(e.target.value)}
@@ -386,8 +448,8 @@ export default function ProblemPage() {
           </div>
         </div>
 
-        {/* Editor */}
-        <div className="flex-1 overflow-hidden">
+        {/* Editor — flex-1 min-h-0 so result panel can push it up */}
+        <div className="flex-1 min-h-0 overflow-hidden">
           <MonacoEditor
             height="100%"
             language={language === 'cpp' || language === 'c' ? language : language}
@@ -407,37 +469,51 @@ export default function ProblemPage() {
           />
         </div>
 
-        {/* Run Results — draggable panel */}
+        {/* Unified draggable result panel */}
         {(runResult || result) && (
-          <div style={{ height: panelHeight }} className="border-t border-gray-800 flex flex-col overflow-hidden">
+          <div style={{ height: panelHeight }} className="border-t border-gray-800 flex flex-col overflow-hidden flex-shrink-0">
             {/* Drag handle */}
-            <div
-              onMouseDown={onDragStart}
-              className="h-1.5 bg-gray-800 hover:bg-blue-500/50 cursor-row-resize flex items-center justify-center group flex-shrink-0 transition-colors"
-              title="Drag to resize">
-              <div className="w-10 h-0.5 bg-gray-600 group-hover:bg-blue-400 rounded-full transition-colors" />
+            <div onMouseDown={onDragStart}
+              className="h-2 bg-gray-800/80 hover:bg-blue-500/40 cursor-row-resize flex items-center justify-center group flex-shrink-0 transition-colors"
+              title="Drag to resize panel">
+              <div className="w-12 h-0.5 bg-gray-600 group-hover:bg-blue-400 rounded-full transition-colors" />
             </div>
-            <div className="flex-1 overflow-y-auto">
-              {runResult && <RunResultPanel result={runResult} onClose={() => setRunResult(null)} />}
-              {result && !runResult && (
-                <div className="p-3 bg-gray-900/60 h-full">
-                  <div className={`flex items-center gap-2.5 font-semibold mb-3 ${result.status === 'Accepted' ? 'text-green-400' : 'text-red-400'}`}>
-                    {result.status === 'Accepted' ? <CheckCircle size={18} /> : <XCircle size={18} />}
-                    {result.status}
-                    {result.runtime && <span className="text-gray-400 font-normal text-sm ml-1">· {result.runtime}ms</span>}
-                    {result.status === 'Accepted' && <span className="ml-auto text-sm bg-green-500/10 text-green-400 px-3 py-0.5 rounded-full">All tests passed ✓</span>}
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    {result.testResults?.map((tr: any, i: number) => (
-                      <div key={i} className={`text-xs px-3 py-2 rounded-lg flex items-center gap-2 ${tr.passed ? 'bg-green-900/20 text-green-300 border border-green-800/40' : 'bg-red-900/20 text-red-300 border border-red-800/40'}`}>
-                        {tr.passed ? <CheckCircle size={12} /> : <XCircle size={12} />}
-                        <span>Test {tr.testCase}: {tr.passed ? 'Passed' : tr.status}</span>
-                        {tr.runtime && <span className="ml-auto text-gray-400">{tr.runtime}ms</span>}
-                      </div>
-                    ))}
-                  </div>
+            <div className="flex-1 overflow-hidden flex flex-col">
+              {/* Tab switcher if both exist */}
+              {runResult && result && (
+                <div className="flex border-b border-gray-800 flex-shrink-0">
+                  <button onClick={() => setRunResult(null)} className="px-4 py-1.5 text-xs text-blue-400 border-b-2 border-blue-400 font-medium">Submit</button>
+                  <button onClick={() => setResult(null)} className="px-4 py-1.5 text-xs text-gray-400 hover:text-white">Run</button>
                 </div>
               )}
+              <div className="flex-1 overflow-y-auto">
+                {/* Run result */}
+                {runResult && !result && <RunResultPanel result={runResult} onClose={() => setRunResult(null)} />}
+                {/* Submit result */}
+                {result && (
+                  <div className="bg-gray-950 h-full">
+                    <div className={`flex items-center gap-2.5 px-4 py-3 border-b border-gray-800 flex-shrink-0 ${result.status === 'Accepted' ? 'bg-green-950/30' : 'bg-red-950/20'}`}>
+                      {result.status === 'Accepted' ? <CheckCircle size={18} className="text-green-400" /> : <XCircle size={18} className="text-red-400" />}
+                      <span className={`font-semibold ${result.status === 'Accepted' ? 'text-green-400' : 'text-red-400'}`}>{result.status}</span>
+                      {result.runtime && <span className="text-gray-400 text-sm">· {result.runtime}ms</span>}
+                      {result.status === 'Accepted' && <span className="ml-auto text-xs bg-green-500/10 text-green-400 px-3 py-0.5 rounded-full">All {result.testResults?.length} tests passed ✓</span>}
+                      <button onClick={() => setResult(null)} className="ml-auto text-gray-600 hover:text-white"><X size={14} /></button>
+                    </div>
+                    {result.status === 'Accepted' && result.runtime && problem?.id && (
+                      <RuntimeChart runtime={result.runtime} problemId={problem.id} />
+                    )}
+                    <div className="p-3 grid grid-cols-2 gap-2">
+                      {result.testResults?.map((tr: any, i: number) => (
+                        <div key={i} className={`text-xs px-3 py-2 rounded-lg flex items-center gap-2 ${tr.passed ? 'bg-green-900/20 text-green-300 border border-green-800/40' : 'bg-red-900/20 text-red-300 border border-red-800/40'}`}>
+                          {tr.passed ? <CheckCircle size={12} /> : <XCircle size={12} />}
+                          <span>Test {tr.testCase}: {tr.passed ? 'Passed' : tr.status}</span>
+                          {tr.runtime && <span className="ml-auto text-gray-500">{tr.runtime}ms</span>}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         )}
