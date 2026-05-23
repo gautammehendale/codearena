@@ -126,7 +126,7 @@ export default function BattleArenaPage() {
       if (completedBattle) {
         setBattle({ ...completedBattle, status: 'completed' });
         // Show win/loss screen based on winner
-        if (completedBattle.winner_id === user?.id) setWinner(user.id);
+        if (completedBattle.winner_id === user?.id) setWinner(user?.id ?? '');
         else if (completedBattle.winner_id) setWinner(completedBattle.winner_id);
         else setWinner('draw');
       }
