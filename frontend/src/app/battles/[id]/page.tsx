@@ -104,16 +104,31 @@ export default function BattleArenaPage() {
   // Load battle + problem (retries until problem loaded)
   const loadBattle = async () => {
     try {
+      // Try active battle first
       const r = await api.get('/battles/active');
-      if (!r.data.battle) return;
-      const b = r.data.battle;
-      setBattle(b);
-      setMyProgress(b.myProgress || { testsPassed: 0, totalTests: 0, solved: false });
-      setOppProgress(b.opponentProgress || { testsPassed: 0, totalTests: 0, solved: false });
-      if (!problemRef.current && (b.problem_slug || b.problem_id)) {
-        const pr = await api.get(`/problems/${b.problem_slug || b.problem_id}`);
-        setProblem(pr.data);
-        problemRef.current = pr.data;
+      if (r.data.battle) {
+        const b = r.data.battle;
+        setBattle(b);
+        setMyProgress(b.myProgress || { testsPassed: 0, totalTests: 0, solved: false });
+        setOppProgress(b.opponentProgress || { testsPassed: 0, totalTests: 0, solved: false });
+        if (!problemRef.current && (b.problem_slug || b.problem_id)) {
+          const pr = await api.get(`/problems/${b.problem_slug || b.problem_id}`);
+          setProblem(pr.data);
+          problemRef.current = pr.data;
+        }
+        return;
+      }
+
+      // Battle might be completed — check history for this specific battle
+      if (!id) return;
+      const hist = await api.get('/battles/history');
+      const completedBattle = hist.data?.find((b: any) => b.id === id);
+      if (completedBattle) {
+        setBattle({ ...completedBattle, status: 'completed' });
+        // Show win/loss screen based on winner
+        if (completedBattle.winner_id === user?.id) setWinner(user.id);
+        else if (completedBattle.winner_id) setWinner(completedBattle.winner_id);
+        else setWinner('draw');
       }
     } catch {}
   };
@@ -188,12 +203,42 @@ export default function BattleArenaPage() {
 
   const handleSubmit = async () => {
     if (!problem || !user) return;
-    setSubmitting(true); setResult(null);
+    setSubmitting(true); setResult(null); setActiveResultTab('submit');
     try {
       const res = await submissionsApi.submit({ problemId: problem.id, language, code });
+      const submissionId = res.data.id;
       const socket = connectSocket(user.id);
-      socket.emit('join_submission', res.data.id);
-    } catch { setSubmitting(false); setResult({ status: 'Error' }); }
+      socket.emit('join_submission', submissionId);
+
+      // Fallback: poll for result if WebSocket doesn't fire within 35s
+      let polled = false;
+      const pollTimer = setTimeout(async () => {
+        if (polled) return;
+        polled = true;
+        try {
+          for (let i = 0; i < 10; i++) {
+            await new Promise(r => setTimeout(r, 3000));
+            const sub = await submissionsApi.get(submissionId);
+            if (sub.data.status !== 'Pending') {
+              setResult({ ...sub.data, testResults: sub.data.test_results || [] });
+              setSubmitting(false);
+              return;
+            }
+          }
+          setSubmitting(false);
+          setResult({ status: 'Timeout', testResults: [] });
+        } catch { setSubmitting(false); }
+      }, 5000);
+
+      // Cancel poll if socket fires first
+      const onResult = (data: any) => {
+        if (data.submissionId === submissionId) {
+          polled = true;
+          clearTimeout(pollTimer);
+        }
+      };
+      socket.once('submission_update', onResult);
+    } catch { setSubmitting(false); setResult({ status: 'Error', testResults: [] }); }
   };
 
   const handleSetPref = async (diff: string) => {

@@ -37,6 +37,7 @@ export default function BattlesPage() {
   const [enrollment, setEnrollment] = useState<{ enrolled: boolean; totalEnrolled: number; status: string | null; loaded: boolean }>({ enrolled: false, totalEnrolled: 0, status: null, loaded: false });
   const [loading, setLoading] = useState(false);
   const [activeBattle, setActiveBattle] = useState<any>(null);
+  const [recentBattle, setRecentBattle] = useState<any>(null); // recently completed
   const [leaderboard, setLeaderboard] = useState<any[]>([]);
 
   const fetchAll = async () => {
@@ -53,7 +54,17 @@ export default function BattlesPage() {
         api.get('/battles/active').then(r => r.data).catch(() => ({ battle: null })),
       ]);
       setEnrollment({ ...enroll, loaded: true });
-      if (active.battle) setActiveBattle(active.battle);
+      if (active.battle) {
+        setActiveBattle(active.battle);
+        setRecentBattle(null);
+      } else {
+        // Check for recently completed battle (last 10 mins)
+        const hist = await api.get('/battles/history').then(r => r.data).catch(() => []);
+        const recent = hist?.[0];
+        if (recent && (Date.now() - new Date(recent.ended_at || recent.created_at).getTime()) < 10 * 60000) {
+          setRecentBattle(recent);
+        }
+      }
     }
   };
 
@@ -117,6 +128,20 @@ export default function BattlesPage() {
         <span className="px-2.5 py-0.5 bg-purple-500/20 text-purple-400 border border-purple-500/30 rounded-full text-xs">Every Hour</span>
       </div>
       <p className="text-gray-400 mb-8">Battles every 30 mins. Enroll up to 30 mins before. Matching at 5 mins before. Battle starts on time.</p>
+
+      {/* Recently completed battle — View Results */}
+      {recentBattle && !activeBattle && (
+        <div className={`rounded-xl p-5 mb-6 flex items-center justify-between border ${recentBattle.won ? 'glass border-green-500/30 bg-green-950/20' : 'glass border-gray-700'}`}>
+          <div className="flex items-center gap-3">
+            <div className="text-2xl">{recentBattle.won ? '🏆' : '💀'}</div>
+            <div>
+              <p className="font-semibold">{recentBattle.won ? 'You won!' : 'You lost'} vs {recentBattle.opponentName}</p>
+              <p className="text-sm text-gray-400">{recentBattle.problem_title} · {recentBattle.problem_difficulty}</p>
+            </div>
+          </div>
+          <button onClick={() => router.push(`/battles/${recentBattle.id}`)} className="btn-secondary text-sm px-4 py-2">View Results</button>
+        </div>
+      )}
 
       {/* Active Battle Banner */}
       {activeBattle && (
