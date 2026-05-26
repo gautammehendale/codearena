@@ -238,4 +238,4 @@ Production uses **Judge0 CE** (community instance, no API key required).
 
 ## 📄 License
 
-MIT © [Gautam Mehendale](https://github.com/gautammehendale)
+MIT — see [LICENSE](LICENSE)
