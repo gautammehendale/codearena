@@ -7,7 +7,7 @@
 [![CI/CD](https://github.com/gautammehendale/codearena/actions/workflows/ci.yml/badge.svg)](https://github.com/gautammehendale/codearena/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-> Built by Gautam Mehendale — with some assistance from Claude (Anthropic) for boilerplate and debugging.
+> Built by Gautam Mehendale with some assistance from Claude (Anthropic) for boilerplate and debugging.
 
 ---
 
